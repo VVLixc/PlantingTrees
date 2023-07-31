@@ -154,7 +154,7 @@
 
 ### 合成/聚合复用原则（CARP）
 
-> 合成复用原则（CRP：Composite Reuse Principle）
+> 合成复用原则（CRP：Composite/Aggregation Reuse Principle）
 >
 > 介绍：
 >
@@ -162,8 +162,6 @@
 >   * 依赖：A类作为B类的方法参数，B依赖A
 >   * 聚合：A类作为B类的属性、set方法；将A聚合到B
 >   * 组合：A类作为B类的属性（直接new创建好了）；A组合到B
-
-
 
 
 
