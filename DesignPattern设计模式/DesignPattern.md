@@ -141,8 +141,8 @@
 >
 > 介绍：
 >
-> * 一个对象和其他对象应该保持最少的了解（类之间关系越密切，耦合度越大）
-> * 只和直接的朋友通信
+> * ==一个对象和其他对象应该保持最少的了解（类之间关系越密切，耦合度越大）==
+> * ==只和直接的朋友通信==
 >   * 对象与对象之间有耦合关系；其中在类的成员变量、方法参数、返回值的类称为直接朋友；局部变量出现的类就不是直接朋友，换言之陌生的类最好不要以局部变量形式出现在类的内部。
 >
 > 迪米特法则注意事项和细节：
@@ -154,42 +154,363 @@
 
 ### 合成/聚合复用原则（CARP）
 
-> 合成复用原则（CRP：Composite/Aggregation Reuse Principle）
+> 合成复用原则（CARP：Composite/Aggregation Reuse Principle）
 >
 > 介绍：
 >
 > * 尽量使用合成/聚合的方式，而不是使用继承。
 >   * 依赖：A类作为B类的方法参数，B依赖A
 >   * 聚合：A类作为B类的属性、set方法；将A聚合到B
+>     * Aggregation聚合：A类有一个B类的成员变量，B类通过set方法声明；那么A类就聚合了B类
 >   * 组合：A类作为B类的属性（直接new创建好了）；A组合到B
+>     * Composite组合：A类有一个B类的成员变量（直接new；耦合性要高于聚合）
+
+
+
+
+
+## 类之间的关系
+
+依赖、泛化（继承）、实现、关联、聚合与组合
+
+> 依赖关系：
+>
+> * Dependency依赖：==A类使用到了B类，A依赖B==
+>   * 只要在类中用到了对方，依赖关系就成立（成员变量、方法返回值、方法参数、方法中使用到）
+>
+> 泛化关系：
+>
+> * Generalization：==泛化关系实际就是继承关系==，是依赖关系的一种特例
+>   * A类继承了B类，就可以说A和B存在泛化关系
+>
+> 实现关系：
+>
+> * Implementation/Realization：==实现关系实际就是A类实现B接口==，依赖关系的一种特例
+>
+> 关联关系：
+>
+> * Association：==关联关系实际就是类与类之间的联系==，依赖关系的一种特例
+>   * 具有导航性，即双向关系或单向关系
+>
+> 聚合关系：
+>
+> * Aggregation聚合：==表示的是整体和部分的关系，整体和部分可分开（部分聚合到整体）==；是关联关系的一种特例，所以也具有关联的导航型和多重性
+>   * A类有一个B类的成员变量，B类==通过set方法==声明；那么A类就聚合了B类
+>
+> 组合关系：
+>
+> * Composite组合：==表示的是整体和部分的关系，整体和部分不可分离（部分组合到整体）则升级为组合关系==；是关联关系的一种特例，所以也具有关联的导航型和多重性
+>   * A类有一个B类的==成员变量（直接new；耦合性要高于聚合）==
+>   * 人、脑袋、身份证之间的关系：脑袋和人就是组合关系；身份证和人就是聚合关系
+>     * 但要注意的是，若人和身份证在代码中进行了级联删除（删除人的同时也删除身份证），那么两者就是组合关系
+
+
 
 
 
 ## 主流设计模式
 
+> 设计模式的七大原则：
+>
+> * 单一职责原则SRP
+> * 接口隔离原则ISP
+> * 依赖倒置原则DIP
+> * 里氏替换原则LSP
+> * 开闭原则OCP
+> * 迪米特法则（最少知道原则）
+> * 合成/聚合复用原则CARP
+
+
+
 ### 创建型模式
+
+> 针对对象的创建 考虑怎样设计代码
 
 #### :full_moon: 单例模式
 
-##### 饿汉式（两种）
+> 介绍：
+>
+> * 保证整个软件系统中，对某个类只能存在一个对象实例；且该类只提供一个获取其对象实例的静态方法
+>
+> 单例模式的八种方式：
+>
+> * 饿汉式：静态常量
+> * 饿汉式：静态方法
+> * 懒汉式：线程不安全
+> * 懒汉式：线程安全，同步方法
+> * 懒汉式：线程安全，同步代码块
+> * 双重检查
+> * 静态内部类
+> * 枚举
+>
+> 注意事项和细节：
+>
+> * 保证系统内存只存在一个对象，节省系统资源，对于一些频繁创建销毁的对象，单例可提高性能
+> * 实例化一个单例类；使用相应的获取对象的方法而不是new
+> * 单例模式使用场景：
+>   * 需要频繁创建和销毁对象
+>   * 创建对象时耗时过多或耗费资源过多（重量级对象）但又经常用到的对象、工具类对象、频繁访问数据库或文件的对象（数据源、session工厂等）
+> * 饿汉式（单线程下、肯定会使用到而不会导致资源浪费）、双重检查、静态内部类、枚举；这些实现单例模式的方式都推荐使用。
 
-##### 懒汉式（三种）
+
+
+##### 饿汉式---静态常量
+
+> 实现步骤：
+>
+> 1. 构造器私有化
+>
+> 2. 类的内部创建对象
+>
+> 3. 向外暴露一个公共静态方法（getInstance）
+>
+> 4. ```java
+>    public class Singleton01 {
+>        private Singleton01() {
+>        }
+>        
+>        private static final Singleton01 instance = new Singleton01();
+>    
+>        public static Singleton01 getInstance() {
+>            return instance;
+>        }
+>    
+>        public static void main(String[] args) {
+>            // true
+>            System.out.println(Singleton01.getInstance() == Singleton01.getInstance());
+>            System.out.println(Singleton01.getInstance().hashCode());
+>            System.out.println(Singleton01.getInstance().hashCode());
+>        }
+>    }
+>    ```
+>
+> 优缺点：
+>
+> * 简单，类装载/加载时就完成了实例化。避免线程同步问题
+> * 类加载完成实例化，未完成Lazy Loading懒加载的效果。若从始至终未使用到该实例对象，造成内存浪费
+
+
+
+##### 饿汉式---静态代码块
+
+> 实现步骤：
+>
+> 1.  饿汉式---静态常量 通过成员变量创建实例
+>
+> 2. 饿汉式---静态代码块  通过静态代码块创建实例
+>
+> 3. ```java
+>    public class Single02 {
+>        private Single02(){
+>    
+>        }
+>        
+>        private static final Single02 instance;
+>        
+>        static {
+>            instance=new Single02();
+>        }
+>        
+>        public static Single02 getInstance(){
+>            return  instance;
+>        }
+>    
+>        public static void main(String[] args) {
+>            System.out.println(Single02.getInstance()==Single02.getInstance());
+>            System.out.println(Single02.getInstance().hashCode());
+>            System.out.println(Single02.getInstance().hashCode());
+>        }
+>    }
+>    ```
+>
+> 优缺点：
+>
+> * 和静态常量的方式一致；该种单例模式可用，但可能造成内存浪费
+
+
+
+##### 懒汉式：线程不安全
+
+> 实现步骤：
+>
+> 1. ```java
+>    public class Singleton01 {
+>        private Singleton01(){}
+>
+>        private static Singleton01 instance;
+>
+>        public static Singleton01 getInstance(){
+>            if (instance==null){
+>                instance=new Singleton01();
+>            }
+>            return instance;
+>        }
+>
+>        public static void main(String[] args) {
+>            System.out.println(Singleton01.getInstance()==Singleton01.getInstance());
+>            System.out.println(Singleton01.getInstance().hashCode());
+>            System.out.println(Singleton01.getInstance().hashCode());
+>        }
+>    }
+>    ```
+>
+> 优缺点：
+>
+> * 懒加载；但只能在单线程下使用
+> * 多线程不能使用，未考虑到线程同步问题
+>   * 多线程下，在未创建对象实例时，多个线程都通过了if判断，就会产生多个实例对象
+
+
+
+##### 懒汉式：线程安全，同步方法
+
+> 步骤：
+>
+> 1. ```java
+>    public class Singleton02 {
+>        private Singleton02(){}
+>        private static Singleton02 instance;
+>        public static synchronized Singleton02 getInstance(){
+>            if (instance==null){
+>                instance=new Singleton02();
+>            }
+>            return instance;
+>        }
+>    
+>        public static void main(String[] args) {
+>            System.out.println(Singleton02.getInstance()==Singleton02.getInstance());
+>            System.out.println(Singleton02.getInstance().hashCode());
+>            System.out.println(Singleton02.getInstance().hashCode());
+>        }
+>    }
+>    ```
+>
+> 优缺点：
+>
+> * 懒加载；添加线程同步，解决线程安全问题
+> * 效率太低
+
+
+
+##### 懒汉式：线程安全，同步代码块
+
+> 步骤：
+>
+> 1. ===不靠谱，没用
+> 2. 本意是对线程同步方法级别进行优化，但无法起到线程同步作用
+
+
+
+##### 双重检查
+
+> 步骤：
+>
+> 1. 需要注意成员属性添加volatile关键字（private volatile static ...）；保证多线程下修饰的变量的可见性。
+>
+> 2. ```java
+>    public class Singleton {
+>        private Singleton() {}
+>    
+>        private volatile static Singleton instance;
+>    
+>        public static Singleton getInstance() {
+>            if (instance == null) {
+>                synchronized (Singleton.class) {
+>                    if (instance == null) {
+>                        instance = new Singleton();
+>                    }
+>                }
+>            }
+>            return instance;
+>        }
+>    
+>        public static void main(String[] args) {
+>            System.out.println(Singleton01.getInstance()==Singleton01.getInstance());
+>            System.out.println(Singleton01.getInstance().hashCode());
+>            System.out.println(Singleton01.getInstance().hashCode());
+>        }
+>    }
+>    ```
+>
+> 优缺点：
+>
+> * Double Check概念是多线程开发经常用到的；进行了两次检查，即可保证线程安全
+> * 线程安全；延迟加载；效率较高。实际开发推荐使用
+
+
 
 ##### 静态内部类
 
-##### 线程单例（没有提到这个，但是提到了双重检查）
+> 类被装载，类中的静态内部类不会被装载；类中使用到静态内部类才会被装载。（类装载线程是安全的）
+>
+> ```java
+> public class Singleton {
+>     private Singleton(){}
+>     private static class SingletonInstance{
+>         private static final Singleton instance=new Singleton();
+>     }
+>     public static Singleton getInstance(){
+>         return SingletonInstance.instance;
+>     }
+>     public static void main(String[] args) {
+>         System.out.println(Singleton.getInstance()==Singleton.getInstance());
+>         System.out.println(Singleton.getInstance().hashCode());
+>         System.out.println(Singleton.getInstance().hashCode());
+>     }
+> }
+> ```
+>
+> 特点：
+>
+> * 静态内部类不会随着类加载而加载，待被调用才会被加载（例如获取类实例时，静态内部类被加载）；
+>   * 所以实现了延迟加载、线程安全
+> * 采用类装载机制保证初始化实例只有一个线程
+
+
 
 ##### 枚举
 
+> 最安全的单例；其他方式都可以通过反射破坏。
+>
+> ```java
+> enum Singleton {
+>     INSTANCE;
+> 
+>     public void doSomething(){
+>         System.out.println("Singleton instance is doing something.");
+>     }
+>     public static void main(String[] args) {
+>         // 获取单例实例
+>         Singleton instance = Singleton.INSTANCE;
+>         // 调用单例方法
+>         instance.doSomething();
+>     }
+> }
+> ```
+>
+> 特点：
+>
+> * 借助JDK1.5添加的枚举实现单例模式，不仅保证了线程安全，还防止反序列化创建新的实例对象
+> * 推荐
 
 
 
 
 
+#### :waning_gibbous_moon: 工厂模式
 
-#### :waning_gibbous_moon: 工厂方法模式
+> 简单工厂模式（静态工厂模式）：
+>
+> * 介绍：
+>   * 简单工厂模式由一个工厂对象决定创建出哪一种产品类的实例（是工厂模式中最简单实用的模式）
+>   * 定义一个创建对象的类，封装实例化对象的行为（代码）
+>   * 软件开发中，当会用到大量的创建某种、某类或某批对象时，就会使用到工厂模式
 
-#### :waning_gibbous_moon: 建造者模式
+
+
+
+
+#### :last_quarter_moon: 建造者模式
 
 #### 抽象工厂模式
 
@@ -199,9 +520,15 @@
 
 
 
+
+
+
+
 ### 结构型模式
 
-#### :waning_gibbous_moon: 适配器模式（类/对象）
+> 站在软件结构角度进行思考设计。
+
+#### :last_quarter_moon:适配器模式（类/对象）
 
 #### :waning_gibbous_moon:代理模式
 
@@ -221,13 +548,15 @@
 
 ### 行为型模式
 
-#### :waning_gibbous_moon:迭代器模式
+> 站在方法的角度进行思考设计
 
-#### :waning_gibbous_moon:模板方法模式
+#### :last_quarter_moon:迭代器模式
 
-#### :waning_gibbous_moon:策略模式
+#### :last_quarter_moon:模板方法模式
 
-#### :waning_gibbous_moon:责任链模式
+#### :last_quarter_moon:策略模式
+
+#### :last_quarter_moon:责任链模式
 
 #### :waning_gibbous_moon:观察者模式
 
