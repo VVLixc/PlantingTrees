@@ -18,7 +18,7 @@ Redis是一种KV键值对类型的缓存数据库
 >
 > https://github.com/redis/redis：
 >
-> * Redis 是一个持久（自身也有一块磁盘，若Redis宕机可将内存中数据保存至磁盘，等Redis启动后进行恢复）保存在磁盘上的内存数据库。数据模型是键值对，但支持许多不同类型的值：Strings, Lists, Sets, Sorted Sets, Hashes, Streams, HyperLogLogs, Bitmaps。
+> * Redis 是一个持久（自身也有一块磁盘，若Redis宕机可将内存中数据保存至磁盘，等Redis启动后进行恢复）保存在磁:盘上的内存数据库。数据模型是键值对，但支持许多不同类型的值：Strings, Lists, Sets, Sorted Sets, Hashes, Streams, HyperLogLogs, Bitmaps。
 >
 > Redis主流功能：
 >
@@ -33,18 +33,18 @@ Redis是一种KV键值对类型的缓存数据库
 >         * Redis是KV键值对的数据模型；（kv键值对就是hashmap，时间复杂度O1）
 >       * 关系的处理：
 >         * MySQL是RDBMS关系型数据库管理系统，Redis是NOSQL（Not Only SQL）概念
->   * 内存存储和持久化（RDB + AOF）
->     * Redis支持异步将内存中数据写到硬盘上，同时不影响继续服务
->       * on disk persistence / persists on disk：在硬盘上持久存在
->   * 高可用架构搭配
->     * 单机 >>> 主从（Master-Slave） >>> 哨兵（Sentinel） >>> 集群（Cluster）
->   * 缓存穿透、击穿、雪崩
->   * 分布式锁
->   * 队列
->     * Redis提供List和Set操作，使得Redis能作为一个很好的消息队列平台来使用
->     * 常通过队列功能做购买限制
->   * 排行榜、点赞
->     * Redis提供的ZSet数据类型能够快速实现复杂的排行榜
+> * 内存存储和持久化（RDB + AOF）
+>   * Redis支持异步将内存中数据写到硬盘上，同时不影响继续服务
+>     * on disk persistence / persists on disk：在硬盘上持久存在
+> * 高可用架构搭配
+>   * 单机 >>> 主从（Master-Slave） >>> 哨兵（Sentinel） >>> 集群（Cluster）
+> * 缓存穿透、击穿、雪崩
+> * 分布式锁
+> * 队列
+>   * Redis提供List和Set操作，使得Redis能作为一个很好的消息队列平台来使用
+>   * 常通过队列功能做购买限制
+> * 排行榜、点赞
+>   * Redis提供的ZSet数据类型能够快速实现复杂的排行榜
 >
 > Redis优势：
 >
