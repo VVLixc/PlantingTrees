@@ -156,6 +156,363 @@ Redis是一种KV键值对类型的缓存数据库
 
 
 
+## Redis十大数据类型
+
+> 这里提到的数据类型都是指的Value的数据类型，Key的类型一般都是字符串。
+>
+> 命令不区分大小写；但Key区分大小写；
+>
+> 帮助命令：help @类型（例如help @string、help @sorted-set）
+
+### String（Redis字符串）
+
+> 简介：
+>
+> * String是Redis最基本的数据类型，一个key对应一个value。
+>
+> * 二进制安全的---支持序列化；
+>
+> * 一个Redis中value最多可以是512M
+>
+> 运用：
+>
+> * 单key单value
+> * 最常用：
+>   * set key value
+>     * `EX` *秒*——设置指定的过期时间，以秒为单位。
+>     * `PX` *milliseconds* -- 设置指定的过期时间，以毫秒为单位。
+>     * `EXAT` *timestamp-seconds* -- 设置key过期的指定 Unix 时间（以秒为单位）。
+>       * 如何获取指定key过期的Unix时间，单位为秒（获取Unix时间戳）
+>         * Long.toString( System.currentTimeMills()/1000L );
+>     * `PXAT` *timestamp-milliseconds* -- 设置密钥过期的指定 Unix 时间（以毫秒为单位）。
+>     * `NX`-- 仅当key尚不存在时才设置该key。
+>     * `XX`-- 仅当key已存在时才设置该key。
+>     * `KEEPTTL`-- 保留设置前与key关联的生存时间。
+>       * 若指定key过期时间后，重新set但未指定过期时间，默认永不过期
+>     * `GET`-- 返回存储在 key 处的旧字符串，如果 key 不存在则返回 nil。`SET`如果存储在 key 中的值不是字符串，则会返回错误并中止。
+>   * get key
+> * 同时设置/获取多个键值：
+>   * MSET key value [ key value ... ]   同时设置一个或多个kv键值对
+>   * MGET key [ key ... ]   同时获取一个或多个kv键值对
+>   * MSETNX  key value [ key value ... ]   同时设置一个或多个kv键值对，当且仅当所有给定key都不存在
+> * 获取指定区间范围内的值：
+>   * getrange  key  起始索引 结束索引 ：获取指定区间范围内的值，类似between...and的关系（0，-1 表示获取全部数据）
+>   * setrange key 索引 具体值：设置指定区间范围内的值（覆盖效果，不是追加）
+> * 数值增减（一定要是数字才能进行增减）：
+>   * 递增数值：INCR key
+>   * 增加指定的整数：INCRBY key increment
+>   * 递减数值：DECR key
+>   * 减少指定的整数：DECRBY key decrement
+> * 获取字符串长度和内容追加：
+>   * STRLEN key
+>   * APPEND key value（向后追加）
+> * 分布式锁：
+>   * setex  键  秒  值：（Set With Expire） 设置键值对的同时设置过期时间
+>   * setnx  键  值：（Set If Not Exist）只有当key不存在才会设置key值
+> * getset（先get再set）：
+>   * getset  键  新值：将给定 key 的值设为 value ，并返回 key 的旧值(old value)。简单一句话，先get然后立即set
+>   * set 键 新值 get：指令效果相同
+>
+> 应用场景：
+>
+> * 例如无限点赞某个视频或商品
+>   * INCR 键  1
+> * 是否喜欢的文章
+>   * INCR 键  1
+
+
+
+### List（Redis列表）
+
+> 简介：
+>
+> * 简单的字符串列表，按插入顺序排序。可添加一个元素到列表的头部或尾部。
+> * 底层实际是一个双端链表（两端操作性能很高，通过索引下标操作中间节点性能较差），最多可包含2的32次方减1个元素（每个列表超过40亿个元素）。
+>
+> 运用：
+>
+> * 单key多value
+> * 主要功能push/pop等，一般用在栈、队列、消息队列等场景；
+> * key不存在创建新的链表；key存在则新增内容；若value全移除，对应的key也随之消失
+> * lpush/rpush/lrange：l表示left、r表示right
+>   * lpush  列表名  v1 [ v2 v3 ....]
+>   * rpush  列表名  v1 [ v2 v3 ....]
+>   * lrange 列表名  下标  下标：
+>     * lrange  list1  0  -1  （0  -1 表示列表全部）
+>     * 和lpush插入元素顺序相反，和rpush插入顺序一致
+> * lpop/rpop
+>   * lpop 列表名 【移除/弹出数值；不写默认一个】：从左边弹出第一个元素
+>   * rpop 列表名 【移除/弹出数值；不写默认一个】：从右边弹出第一个元素
+> * lindex
+>   * lindex 列表名  index索引值：按照索引下标获取元素（从上到下）
+> * llen  列表名：获取列表中元素的个数
+> * lrem 列表名  数字N  给定值v1
+>   * 删除N个列表中值为v1的元素；N为0表示删除所有值为v1的元素
+> * ltrim  列表名 起始索引 结束索引
+>   * 截取指定范围的值再赋值给列表（重定向/覆盖）
+> * rpoplpush  源列表  目的列表：
+>   * 移除列表的最后一个元素，并将该元素添加到另一个列表（lpush后lrange新增的数据肯定是在第一位）并返回
+> * lset  列表名 索引 新元素：
+>   * 将列表中索引位置的元素替换为指定的新元素
+> * linsert  列表名  before/after  已有值   插入的新值：
+>   * 在列表中某个已有值（重复也只会对第一个值操作）的前/后再添加新的值
+>
+> 应用场景：
+>
+> * 微信公众号订阅的消息：
+>   * 例如lixc订阅了两篇公众号孟岩和E大，此时两位分别发布了文章：m1，e1
+>     * lpush  lixcxxx  m1 e1
+>   * 当lixc查看自己订阅全部文章时（类似分页，下面就表示显示10条）
+>     * lrange lixcxxx  0 9
+
+
+
+### Hash（Redis哈希表）
+
+> 简介：
+>
+> * Hash是一个String类型的field字段和value值的映射表；特别适合用于存储对象。
+> * 每个Hash可存储2的32次方减1个键值对。
+>
+> 运用：
+>
+> * KV模式不变，但V是一个键值对（ Map<String , Map< Object,Object >> ）
+> * hset/hget/hmset/hmget/hgetall/hdel
+>   * hset  hash键  键  值
+>   * hgset  hash键  键
+>   * hmset  hash键  键1  值1   键2   值2 ...
+>   * hmget  hash键  键1  键2   ...
+>   * hgetall hash键：获取哈希表的V也就是对应的所有键值对
+>   * hdel hash键 键1 键2  ...
+> * hlen hash键：获取某个hash键内的全部键值对数量
+> * hexists hash键 键1：判断在hash键对应的键值对中是否存在键1
+> * hkeys/hvals：
+>   * hkeys  hash键：获取该hash键下对应的所有键
+>   * hvals   hash键：获取该hash键下对应的所有键对应的值
+> * hincrby/hincrbyfloat
+>   * hincrby hash键 键  增量整数
+>   * hincrbyfloat hash键 键 增量浮点数
+> * hsetnx  hash键  键  值
+>   * 键不存在则赋值，存在则无效
+>
+> 应用场景：
+>
+> * 购物车场景（中小厂适用）：
+>   * 新增商品：hset  cart001:uid001  1010   1
+>   * 商品数量增加：hincrby  cart001:uid001  1010  1
+>   * 商品总数：hlen  cart001:uid001
+>   * 全部选择：hgetall cart001:uid001
+
+
+
+
+### Set（Redis集合）
+
+> 简介：
+>
+> * Set是String类型的无序集合。
+> * 集合成员唯一，不能出现重复数据；
+> * 集合中对象的编码可以是intset或hashtable。
+> * Set集合是通过哈希表实现的，所以添加、删除、查找的复杂度都是O(1)。
+> * 集合中可存储2的32次方减1个成员。
+>
+> 运用：
+>
+> * 单key多value，且无重复
+> * sadd key member [member ...]：
+>   * 添加元素；无序不重复
+> * smembers key：
+>   * 遍历集合中所有元素
+> * sismember key member：
+>   * 判断元素是否在集合中（1存在0不存在）
+> * srem key member [ member ... ]：
+>   * 删除member元素
+> * scard key：
+>   * 获取集合中元素个数
+> * srandmember key  【count】：
+>   * 随机展示集合中的元素（个数不指定默认是一个）
+> * spop key 【count】：
+>   * 从集合中弹出指定个数的元素
+> * smove key1 key2 member：
+>   * 从key1集合中将member元素取出放在key2集合中
+> * 集合运算：
+>   * 集合的差集运算：
+>     * sdiff  key  [ key ... ]：哪个集合在前显示的就是属于前集合不属于后集合的元素构成的集合
+>   * 集合的并集运算：sunion key [ key ... ]
+>     * 两集合元素合并构成的结合
+>   * 集合的交集运算：
+>     * sinter key [ key ... ]：两集合共同拥有的元素构成的集合
+>     * Redis7新命令：
+>       * sintercard  numberkeys  key  [ key ... ]  [ Limit limit ]：
+>         * numberkeys表示集合个数；limit表示需要显示几个
+>       * 不返回结果集，只返回结果的基数（返回由所有给定集合的交集产生的集合的基数【基数表示去重后的元素个数】）
+>
+> 应用场景：
+>
+> * 微信抽奖小程序：
+>   * spop key 【count】：抽到了就从集合剔除
+>   * srandmember key  【count】：抽到了不剔除继续参与抽奖
+> * 微信朋友圈点赞查看同赞朋友：
+>   * smembers key
+>   * sinter key [ key ... ]
+> * qq内推可能认识的人：
+>   * sdiff key [ key ... ]
+>   * sinter key [ key ... ]
+
+
+
+### ZSet（Redis有序集合）
+
+> 简介：
+>
+> * ZSet就是Sorted Set；String类型的有序集合。
+> * 不允许成员重复。
+> * 会在每个元素关联一个double类型的分数（Redis正是通过分数来为集合中的成员进行从大到小的排序）。
+>   * k1 score v1   每个值前都关联一个分数
+> * ZSet的成员是唯一的，但分数（Score）却可重复。
+> * ZSet集合通过哈希表实现，所以添加、删除、查找的复杂度都是O(1)。
+> * 集合中可存储2的32次方减1个成员。
+>
+> 运用：
+>
+> * ZSet是在Set基础上每个val值前加score分数值
+>   * 之前set是 k1  v1  v2  v3；
+>   * 现在zset是k1 score v1 score v2
+> * zadd key  score member 【score member ...】
+> * zrange key start stop 【withscores】：
+>   * 按元素份数从小到大排序；0 -1表示全部
+>   * withscores表示携带分数
+> * zrevrange key start stop 【withscores】：
+>   * 从大到小排序
+> * zrangebyscore key min max [WITHSCORES] [LIMIT offset count]
+>   * 获取指定分数范围内的集合元素
+>   * ( 表示不包含：ZRANGEBYSCORE zset1 (60 90 withscores
+>   * limit作用是返回限制：开始下标   多少步
+> * zscore  key  member：获取集合内指定元素的分数
+> * zcard key：元素个数
+> * zrem key member [member ...]：删除指定集合内的元素
+> * zincrby key increment member：增量指定元素的分数
+> * zcount key min max：获取指定分数范围内的元素个数
+> * zmpop numkeys key [key ...] MIN|MAX [COUNT count]：
+>   * 从键名列表中的第一个非空排序集中弹出一个或多个元素，他们是成员分数对
+>     * ZMPOP 1 zset1 min count 2：弹出zset1集合中最小的两个元素
+>     * ZMPOP 1 zset1 max count 1：弹出zset1集合中最大的一个元素
+> * zrank key member：获得指定元素的下标值
+> * zrevrank key member：逆序获得下标值
+>
+> 应用场景：
+>
+> * 根据商品销售对商品进行排序显示：
+>   * zadd goods1 1 joy1 1 
+>   * zincrby goods 0 -1 withscores
+>   * zrevrange goods 0 -1 withscores
+
+
+
+
+
+
+
+### GEO（Redis地理空间）
+
+> 简介：
+>
+> * 经纬度
+> * GEO主要用来存储地理位置信息，并对存储的信息进行操作。
+>   * 添加地理位置的坐标
+>   * 获取地理位置的坐标
+>   * 计算两个位置之间的距离
+>   * 根据用户给定的经纬度坐标来获取指定范围内的地理位置集合。
+
+
+
+### HyperLogLog（Redis基数统计）
+
+> 简介：
+>
+> * HyperLogLog是用来做基数（不重复的数字；例如IP）统计的算法；
+> * 在输入元素数量或体积非常大时，计算基数所需的空间总是固定且很小的。
+> * HyperLogLog只需花费12KB，即可计算接近2的64次方个不同元素的基数（这和计算基数元素越多耗费内存越多的集合形成鲜明对比）。
+> * 但HyperLogLog只会根据输入元素来计算基数，而不会存储输入元素本身，所以不能像集合那样返回输入的各个元素。
+
+
+
+### BitMap（Redis位图）
+
+> 简介：
+>
+> * Bit Arrays或Simple Bit Map，可以称之为位图。
+> * 由0和1状态表现的二进制位的数组。
+
+
+
+### BitField（Redis位域）
+
+> 简介：
+>
+> * 可一次性操作多个比特位域（指连续的多个比特位）；会执行一系列操作并返回一个响应数组，数组中的元素对应参数列表中的相应操作的执行结果。
+> * 说白了就是通过BitField命令可一次性对多个比特位域进行操作。
+
+
+
+### Stream（Redis流）
+
+> 简介：
+>
+> * 类似MQ消息中间件；
+> * Redis5.0版本新增的数据结构。主要用于消息队列（MQ：Message Queue）；Redis版的消息中间件；
+> * Redis本身有一个发布订阅（pub/sub）来实现消息队列的功能，但缺点是消息无法持久化，若网络断开、宕机等，消息就会被丢弃。
+> * 简单来说发布订阅（pub/sub）可分发消息，但无法记录历史消息。
+> * Stream提供了消息的持久化和主备复制功能，可让任何客户端访问任何时刻数据，且记录每个客户端的访问位置，还能保证消息不丢失。
+
+
+
+### Redis 键（Key）
+
+> keys *：查看当前库所有的key
+>
+> exists key：判断某个key是否存在，可同时判断多个（存在几个返回数字几）
+>
+> type key：查看该key什么类型
+>
+> del key：删除指定的key数据（可同时删除多个）
+>
+> unlink key：非阻塞删除，仅将key从keyspace元数据中删除，真正的删除会在后续异步中操作；（可同时非阻塞删除多个）
+>
+> * 若真要删除很大的数据，使用原子操作命令del指令是阻塞的，若在高并发程序下就会产生阻塞队列，系统性能急剧下降。所以使用unlink指令更方便
+>
+> ttl key：Time To Live查看还有多少秒过期，-1表示永不过期（未指定key的超时时间默认就是永不过期），-2表示已过期
+>
+> expire key 秒钟：为给定的key设置过期时间
+>
+> move key dbindex【0-15】：将当前数据库的key移动到给定的数据库db中
+>
+> * 一个Redis服务器默认存在16个数据库；
+>   * 可通过select 15、select 16切换数据库指令看出16即超出范围；
+>   * 也可通过查看Redis自定义后的配置文件redis.conf：显示databases 16
+>
+> select dbindex：切换数据库【0-15】，默认为0
+>
+> * （切换到某个库，>前缀就会有 [下标] 显示；没数字表示默认在0号库）
+>
+> dbsize：查看当前数据库key的数量
+>
+> flushdb：清空当前库
+>
+> flushall：通杀全部库
+
+
+
+### 数据类型命令及落地运用
+
+> 
+
+
+
+
+
+
+
 
 
 
