@@ -404,7 +404,7 @@ Redis是一种KV键值对类型的缓存数据库
 >
 > * 根据商品销售对商品进行排序显示：
 >   * zadd goods1 1 joy1 1 
->   * zincrby goods 0 -1 withscores
+>   * zincrby goods 1 joys
 >   * zrevrange goods 0 -1 withscores
 
 
@@ -418,11 +418,58 @@ Redis是一种KV键值对类型的缓存数据库
 > 简介：
 >
 > * 经纬度
+> * 地理位置是使用二维的经纬度表示，只要确定一个点的经纬度即可取得他在地球的位置。
+>   * 最后会转为二进制再通过base32编码
 > * GEO主要用来存储地理位置信息，并对存储的信息进行操作。
 >   * 添加地理位置的坐标
 >   * 获取地理位置的坐标
 >   * 计算两个位置之间的距离
 >   * 根据用户给定的经纬度坐标来获取指定范围内的地理位置集合。
+> * 获取某个坐标经纬度：http://api.map.baidu.com/lbsapi/getpoint/
+> * ZSet的类型
+>
+> 运用：
+>
+> * geoadd：
+>   * 添加经纬度坐标
+>   * geoadd city 116.403963 39.915119 "天安门" 116.403414 39.924091 "故宫" 116.024067 40.362639 "长城"
+>   * type city >>> zset
+>   * zrange city 0 -1 >>> 中文乱码：
+>     * Redis客户端中文乱码问题：
+>       * redis-cli -a xxx --raw
+> * geopos：（position）
+>   * 返回经纬度
+>   * GEOPOS city 天安门 长城 故宫
+> * geohash：
+>   * 返回坐标的geohash表示（geohash算法生成base32编码值）
+>   * geohash city 天安门 长城 故宫
+> * geodist：
+>   * 两个位置之间的距离
+>   * geodist city 天安门 长城 m
+>     * m：米
+>     * km：千米
+>     * ...
+> * georadius：
+>   * 以半径为中心，查找附件的xxx 
+>   * 127.0.0.1:6379> GEORADIUS city 116.418038 39.91979 10 km withdist withcoord count 10 withhash desc
+>     故宫
+>     1.3358
+>     4069885568908290
+>     116.40341609716415405
+>     39.92409008156928252
+>     天安门
+>     1.3082
+>     4069885555089531
+>     116.40396326780319214
+>     39.91511970338637383
+> * GEORADIUSBYMEMBER：
+>   * 找出位于指定范围内的元素，中心点由给定的位置元素决定
+>   * GEORADIUSBYMEMBER city 天安门 10 km withdist withcoord count 10 withhash
+>
+> 应用场景：
+>
+> * 美团地图位置附近的酒店推送
+> * 高德地图附近的核算检查点
 
 
 
@@ -431,9 +478,31 @@ Redis是一种KV键值对类型的缓存数据库
 > 简介：
 >
 > * HyperLogLog是用来做基数（不重复的数字；例如IP）统计的算法；
-> * 在输入元素数量或体积非常大时，计算基数所需的空间总是固定且很小的。
-> * HyperLogLog只需花费12KB，即可计算接近2的64次方个不同元素的基数（这和计算基数元素越多耗费内存越多的集合形成鲜明对比）。
+> * 优点：在输入元素数量或体积非常大时，计算基数所需的空间总是固定且很小的。
+> * 每个HyperLogLog键只需花费12KB内存，即可计算接近2的64次方个不同元素的基数（这和计算基数元素越多耗费内存越多的集合形成鲜明对比）。
 > * 但HyperLogLog只会根据输入元素来计算基数，而不会存储输入元素本身，所以不能像集合那样返回输入的各个元素。
+> * 需求：
+>   * 统计某个网站、文章的UV（Unique Visitor，独立访客，一般理解为客户端IP；需要去重考虑）
+>   * 用户搜索网站关键词的数量
+>   * 统计用户每天搜索不同词条个数
+> * HyperLogLog：去重复统计功能的基数估计算法（用于在不占用大量存储空间的情况下估计一个集合中的唯一元素数量）
+> * 基数：是一种数据集，去重后的真实个数
+> * 基数统计：统计一个集合中不重复的元素个数，即对集合去重后剩余元素的计算
+>   * 去重脱水后的真实数据
+>
+> 运用：
+>
+> * pfadd key [element [element ...]]
+>   * Probabilistic Filter（概率过滤器）
+>   * 添加指定元素到HyperLogLog中
+> * pfcount key [key ...]
+>   * 返回给定的HyperLogLog的基数估计值
+> * pfmerge destkey sourcekey [sourcekey ...]
+>   * 将多个HyperLogLog合并为一个HyperLogLog
+>
+> 应用场景：
+>
+> * 天猫网站首页亿级UV的Redis的统计方案
 
 
 
@@ -442,7 +511,58 @@ Redis是一种KV键值对类型的缓存数据库
 > 简介：
 >
 > * Bit Arrays或Simple Bit Map，可以称之为位图。
-> * 由0和1状态表现的二进制位的数组。
+> * 由0和1状态表现的二进制位的bit数组。
+>   * 用户是否登录
+>   * 电影、广告是否被点击
+>   * 钉钉打卡签到
+> * 用String类型作为底层数据结构实现的一种统计二值状态的数据类型（使用type指令可以看出BitMap也是String类型）；
+> * 位图本质是数组；基于String类型按位操作。该数组由多个二进制位（一个字节也就是一个byte=8bit也就是8位）组成，每个二进制位都对应一个偏移量（我们称之为一个索引）
+> * BitMap支持的最大位数2^32位。极大地节省空间，使用512M内存即可存储多达42.9亿（2 ^32）的字节信息
+> * BitMap位图能做什么：状态统计。
+>
+> 运用：
+>
+> * setbit key offset value：   setbit 键 偏移位  0/1
+>   * 给指定key的值的第offset赋值val
+> * getbit key offset：
+>   * 获取指定key的第offset偏移位的值
+> * setbit和getbit案例说明---按照天：
+>   * setbit sign:u1:202308 0 1
+>   * setbit sign:u1:202308 1 1
+>   * ...
+>   * setbit sign:u1:202308 30 1
+>   * getbit sign:u1:202308 30
+>   * bitcount  sign:u1:202308 0 30 
+> * strlen：
+>   * 统计字节数占用多少；
+>   * 不是统计字符串长度，而是统计占用几个字节；超过8位后自动按8位1个字节（setbit key1 32 1获取到的strlen就是5）
+> * bitcount key [start end [BYTE|BIT]]：
+>   * 全部键里面含有1的个数；
+>   * 可直接bitcount  key来查询
+> * bitop：
+>   * 对多个位图进行逻辑操作
+>   * BITOP operation destkey key [key ...]：
+>     * `operation`：指定逻辑操作，可以是AND（与）、OR（或）、XOR（异或）或NOT（非）。
+>       * 与（AND）：相同位置上**都为1**的两个二进制数，**结果为1**；否则为0。
+>       * 或（OR）：两个二进制数中**任意位置上为1**的情况，**结果为1**；否则为0。
+>       * 非（NOT）：二进制数的**每一位取反**，即0变为1，1变为0。
+>       * 异或（XOR）：对于相同位置上的两个二进制数，如果**值不同，则结果为1**；否则为0。
+>     * `destkey`：指定结果存储的目标键名。
+>     * `key`：要执行逻辑操作的位图键名。
+>
+> 应用场景：
+>
+> * 一年365天，全年天天登陆占用多少字节：
+>   * 365/8=45.xxx 46个字节
+> * 按照年：
+>   * 存储一个用户一年的签到情况只会使用到46个字节，1000W用户也只需要438.91MB
+>   * 加入是亿级系统：
+>     * 每天使用1个1亿位的Bitmap约占12MB的内存（10^8/8/1024/1024），10天的Bitmap的内存开销约为120MB，内存压力不算太高。
+>   * 此外，实际使用中，最好对BitMap位图设置过期时间，让Redis自动删除不再需要的签到记录来节省内存开销
+
+
+
+
 
 
 
@@ -452,6 +572,14 @@ Redis是一种KV键值对类型的缓存数据库
 >
 > * 可一次性操作多个比特位域（指连续的多个比特位）；会执行一系列操作并返回一个响应数组，数组中的元素对应参数列表中的相应操作的执行结果。
 > * 说白了就是通过BitField命令可一次性对多个比特位域进行操作。
+>
+> 运用：
+>
+> * 
+>
+> 应用场景：
+>
+> * 
 
 
 
@@ -460,10 +588,103 @@ Redis是一种KV键值对类型的缓存数据库
 > 简介：
 >
 > * 类似MQ消息中间件；
+> * Redis消息队列的两种方案：
+>   * List实现消息队列：
+>     * 实现方式就是点对点模式
+>     * lpush rpop
+>     * rpush lpop
+>     * 常用来做异步队列使用
+>   * Pub/Sub：
+>     * Rdis发布订阅（Pub/Sub）缺点是消息无法持久化。若网络断开、宕机，消息就会别丢弃。而且也没有ACK签收机制来保证数据可靠性。
+>       * 简单来说发布订阅（pub/sub）可分发消息，但无法记录历史消息。
 > * Redis5.0版本新增的数据结构。主要用于消息队列（MQ：Message Queue）；Redis版的消息中间件；
-> * Redis本身有一个发布订阅（pub/sub）来实现消息队列的功能，但缺点是消息无法持久化，若网络断开、宕机等，消息就会被丢弃。
-> * 简单来说发布订阅（pub/sub）可分发消息，但无法记录历史消息。
 > * Stream提供了消息的持久化和主备复制功能，可让任何客户端访问任何时刻数据，且记录每个客户端的访问位置，还能保证消息不丢失。
+> * Stream就是：Redis版的MQ消息中间件+阻塞队列
+> * Stream流能：
+>   * 实现消息队列，支持消息持久化、支持自动生成全局唯一ID、支持ACK确认消息的模式、支持消费组模式等，让消息队列更加稳定可靠。
+> * 原理：Stream是一个消息链表，将所有加入的消息串起来，每个消息都有一个唯一ID和对应内容
+>
+> 运用：
+>
+> 队列相关指令：
+>
+> * xadd：添加消息到队列末尾
+>   * 消息ID必须比上个ID大
+>   * 默认使用星号表示自动生成规矩
+>   * *：用于XADD命令中，让系统生成自动ID
+>   * xadd mystream * id 003 name vc
+> * xrange：用于获取消息列表，忽略删除的消息
+>   * -代表最小值，+代表最大值；count表示最多获取多少个值（类似MySQL分页）
+>   * xrange mystream - +
+> * xrevrange
+> * xdel：
+>   * xdel mystream 1691768198078-0（这是消息的id）
+> * xlen
+> * xtrim：对Stream的长度进行截取，若超长会进行截取
+>   * maxlen：允许的最大长度
+>     * xtrim mystream maxlen 2：会将超出两条范围的信息截取，先进先出所以XRANGE上面的先被截取
+>   * minid：允许的最小id
+>     * xtrim mystream minid 1691768869804-0：id小于指定的id就会被截取
+> * xread：用于获取消息（阻塞/非阻塞），只会返回大于指定id的消息；【类似Java中的阻塞队列】
+>   * count 最多读取多少条消息；
+>   * block 是否以阻塞的方式读取消息，默认不阻塞；若值为0，表示永远阻塞
+>   * 非阻塞：
+>     * xread count 2 streams mystream 0-0
+>       * 0-0表示从头获取；0也可以
+>   * 阻塞：
+>     * xread count 1 block 0 streams mystream $：阻塞等待比当前最新的id还要新的消息
+>
+> 消费组相关指令：
+>
+> * xgroup create：用于创建消费者组（创建消费者组必须制定ID，0表示从头消费，$表示从尾消费新的消息）
+>   * xgroup create mystream groupA $
+>     * $表示从Stream尾部开始消费
+>   * xgroup create mystream groupB 0
+>     * 0表示从Stream头部开始消费
+> * xreadgroup group：
+>   * ‘>’：表示从第一条尚未被消费的消息开始读取
+>   * xreadgroup group groupB consumer1 streams mystream >
+>     * Stream中的消息一旦被消费者组内的消费者读取，就不能再被读取，即同一个消费者组的消费者们不能消费同一条消息。再次执行xreadgroup读取的就是空值。
+>     * 不同消费者组的消费者可以消费同一条Stream消息
+>   * 消费者组的目的
+>     * 让组内多个消费者共同分担信息读取，实现消息读取负载在多个消费者间均衡分布
+>       * xreadgroup group groupX consumer1 **count 2** streams mystream >
+> * 重点问题：
+>   * 消息的已读未签收和已读已签收：
+>     * 消费者使用XACK命令通知Stream消息已处理完成
+> * xpending：
+>   * 查询每个消费组内所有消费者 【已读取未签收】的消息
+>     * xpending mystream groupX
+>       5
+>       1691768869804-0
+>       1691769872034-0
+>       consumer1
+>       2
+>       consumer2
+>       2
+>       consumer3
+>       1
+> * xack：向消息队列确认消息处理已完成
+>   * xpending mystream groupX - + 10 consumer2
+>     1691769496990-0
+>     consumer2
+>     483412
+>     1
+>     1691769501842-0
+>     consumer2
+>     483412
+>     1
+>   * xack mystream groupX 1691769496990-0
+>   *  xack mystream groupX 1691769501842-0
+>   * 将消费者组每一个消费者读取的信息向消息队列确认处理完成后
+>     * xpending mystream groupX
+>       0
+> * xinfo：用于打印Stream\Consumer\Group的详细信息
+>   * xinfo stream mystream
+>
+> 使用建议：
+>
+> * Stream还是不能100%等价于Kafka、RabbitMQ来使用的，生产案例少，慎用。
 
 
 
@@ -500,12 +721,6 @@ Redis是一种KV键值对类型的缓存数据库
 > flushdb：清空当前库
 >
 > flushall：通杀全部库
-
-
-
-### 数据类型命令及落地运用
-
-> 
 
 
 
