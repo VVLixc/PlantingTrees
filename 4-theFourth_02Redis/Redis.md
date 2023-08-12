@@ -726,6 +726,38 @@ Redis是一种KV键值对类型的缓存数据库
 
 
 
+## Redis持久化
+
+> https://redis.io/docs/management/persistence/
+
+### 持久化双雄
+
+#### RDB（Redis Database）
+
+> RDB（Redis数据库）持久化以指定的时间间隔执行数据集的时间点快照
+
+
+
+#### AOF（Append Only File）
+
+> AOF（仅追加文件）持久化记录服务器接收的每个写操作。然后这些操作可在服务器启动时再次重放，重建原始数据集。命令的记录格式和Redis协议本身相同。
+
+
+
+### RDB-AOF混合持久化
+
+
+
+### 纯缓存模式
+
+
+
+
+
+
+
+
+
 
 
 
