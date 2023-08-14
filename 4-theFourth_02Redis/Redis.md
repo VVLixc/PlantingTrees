@@ -1069,7 +1069,7 @@ Redis是一种KV键值对类型的缓存数据库
 >
 > https://redis.io/docs/manual/pipelining/
 >
-> Pipeline就是为了解决RTT往返时间，近视将命令打包一次性发送，对Redis执行不造成任何其他影响。
+> Pipeline就是为了解决RTT往返时间，仅是将命令打包一次性发送，对Redis执行不造成任何其他影响。
 >
 > * 一句话：批处理命令变种优化措施，类似Redis的原生批命令（mset、mget...）
 >
