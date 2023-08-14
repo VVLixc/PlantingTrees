@@ -1110,9 +1110,159 @@ Redis是一种KV键值对类型的缓存数据库
 
 
 
+## Redis复制（replica）
+
+> https://redis.io/docs/management/replication/
+>
+> Redis复制是什么：
+>
+> * 主从复制，master以写为主，slave以读为主
+> * 当master数据变化，自动将新的数据异步同步（replication）到其他slave数据库
+>
+> Redis replication能干嘛：
+>
+> * 读写分离
+> * 容灾恢复
+> * 数据备份
+> * 水平扩容支撑高并发
+>
+> Redis replication怎么用：
+>
+> * 配从（库）不配主（库）
+> * 权限细节：
+>   * master若配置了requirepass参数，需要密码登录；
+>   * slave就要配置masterauth来设置校验密码，否则master就会拒绝slave的访问请求
+> * 基本操作命令：
+>   * info replication
+>     * 查看复制节点的主从关系和配置信息
+>   * replicaof  主库IP  主库port
+>     * 一般写入进redis.conf配置文件内（配从）
+>   * slaveof 主库IP 主库port
+>     * 相当于上面replicaof配置命令的手写命令；
+>     * 每次与master断开，都需重新连接，除非配置redis.conf
+>     * 运行期间修改slave节点的信息，若该数据库已经是某主数据库的从数据库，会断掉和原主数据库的同步关系，转而和新的主数据库同步
+>   * slaveof no one
+>     * 使当前数据库停止与其他数据库的同步，转为主数据库
 
 
 
+### Redis主从复制案例演示
+
+> 架构说明：
+>
+> * 一主二从；三台Linux虚拟机，每台安装Redis
+> * 拷贝多个克隆文件：redis6739.conf、redis6380.confredis6381.conf
+>
+> 口诀：
+>
+> * 三边网络相互ping通（三台主机可以互相访问）且注意防火墙配置（确保主机端口开放）
+> * 三大命令：
+>   * 主从复制（写在redis.conf配置文件）：
+>     * replicaof  主库IP  主库port；（配从（库）不配主（库））
+>   * 改换门庭：
+>     * slaveof 新主库IP 新主库port
+>   * 自立为王：
+>     * slaveof no one
+>
+> redis.conf配置文件（以master为例）：
+>
+> * 从出厂的最干净的配置文件开始配起：
+>   * cp -r /opt/redis-7.0.12/redis.conf  /myredis/redis6379.conf
+>
+> 1. daemonize yes
+>    1. 后台运行，不弹出命令窗口
+> 2. protected-mode no
+>    1. 关闭保护模式
+> 3. #bind 127.0.0.1 
+>    1. 直接注释掉或改为本机IP地址，否则影响远程IP连接
+> 4. requirepass 自定义密码
+> 5. port 6379
+> 6. dir /myredis
+> 7. pid文件，pidfile
+>    1. 使用默认即可
+> 8. logfile "/myredis/6379.log"
+>    1. log文件名字，logfile
+> 9. dbfilename dump6379.rdb
+>    1. dump.rdb文件名字
+> 10. appendonly  no&&   appendfilename   && appenddirname （不再开启）
+>     1. aof文件名字，appendfilename
+>     2. 使用默认即可，用不用都可以（因为有RDB）
+> 11. 从机访问主机的通行密码masterauth（从机需要配置）
+>     1. replicaof  主机IP  主机port
+>     2. masterauth "主机密码"
+>
+> 常用三招：
+>
+> * 一主二仆：
+>   * 方案一：配置文件固定写死
+>     * redis.conf配置（配从库不配主库）：replicaof 主机IP 主机PORT   && masterauth   主机密码
+>     * 配置完成后，先启动master在启动两台slave（注意启动redis-cli -a 密码 -p 端口    这里的端口不指定默认会访问6379）
+>     * 主从关系查看：
+>       * 日志：
+>         * 主机日志（配置文件设定的日志名为6370.log：vim 6369.log）：
+>           * Synchronazition xxxxx 6380 succeed   &&   Synchronazition xxxxx 6381 succeed
+>         * 备机日志：
+>           * Connecting xxx 6379     之后 Successful
+>       * 命令：
+>         * info replication：查看复制节点的主从关系和配置信息
+>   * 主从问题演示：
+>     * 从机可执行写命令吗：
+>       * no，读写分离
+>     * 从机切入点问题：
+>       * slave是从头复制还是从切入点开始复制：
+>         * 首次一锅端全部复制，之后master写，slave跟
+>     * 主机shutdown后，从机会上位吗
+>       * 原地待命；从机数据可正常使用，等待主机重启。
+>     * 主机shutdown后，重启后主从关系还存在吗，从机是否还能顺利复制
+>       * 可以
+>     * 某台从机down后，master继续，从机重启后还能跟上大部队吗
+>       * 和问题二一致，可以
+>   * 方案二：命令操作手动指定
+>     * 从机停机去除配置文件关联主机配置项；三台都是主机状态
+>     * 配置文件没写死，在从机服务器上通过执行 “slaveof 新主库IP 新主库port”  命令再次完成主从复制
+>     * 但是注意，使用命令设置主从关系，从机重启，关系失效
+>   * 配置文件 和 命令 的区别：
+>     * 配置持久稳定
+>     * 命令单次生效
+> * 薪火相传：
+>   * 上一个slave可作为下一个slave的master，可有效减轻master写压力
+>   * 中途变更转向：会清除之前的数据，重新建立拷贝最新的
+>   * slaveof  新主库IP 新主库端口
+>   * （是不是可以考虑在配置文件中，slave1设置了和master的主从关系，slave2设置了和slave1的主从关系）
+> * 反客为主：
+>   * slaveof no one
+
+
+
+### 复制原理和工作流程
+
+> slave首次全新连接master，一次完全同步（全量复制）将被自动执行，slave自身原有数据会被master数据覆盖清除
+>
+> master会将rdb快照文件和所有缓存的命令发送到slave，完成一次完全同步；slave接收到数据后，将其存盘并加载到内存中，完成复制初始化
+>
+> master 发出ping包的周期，默认10秒
+>
+> master继续将新收集到的修改命令自动传给slave
+>
+> 从机断开重连，master只会把已经复制的offset后面的数据复制给slave，类似端点续传
+
+> 主从复制缺点：
+>
+> * 复制延时，信号衰减
+> * master宕机
+>   * 默认情况不会在slave节点中自动重选master
+>   * 无人值守安装变成刚需
+>     * 引出哨兵、集群
+
+
+
+
+
+
+
+## Redis哨兵（sentinel）
+
+## Redis集群（cluster）
 
 
 
