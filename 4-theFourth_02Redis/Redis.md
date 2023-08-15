@@ -1151,7 +1151,7 @@ Redis是一种KV键值对类型的缓存数据库
 > 架构说明：
 >
 > * 一主二从；三台Linux虚拟机，每台安装Redis
-> * 拷贝多个克隆文件：redis6739.conf、redis6380.confredis6381.conf
+> * 拷贝多个克隆文件：redis6739.conf、redis6380.conf、redis6381.conf
 >
 > 口诀：
 >
