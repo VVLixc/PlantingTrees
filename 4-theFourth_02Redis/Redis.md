@@ -1258,15 +1258,270 @@ Redis是一种KV键值对类型的缓存数据库
 
 
 
-
-
 ## Redis哨兵（sentinel）
+
+### 哨兵值守基本介绍
+
+> Redis哨兵的高可用性：https://redis.io/docs/management/sentinel/
+>
+> * High availability for non-clustered Redis：非Redis集群的高可用性；
+>   * 即两种：主从复制 + 哨兵；纯Redis集群
+>
+> Redis Sentinel是什么：
+>
+> * 哨兵（吹哨人）巡查监控后台master主机是否故障，若出现故障就会根据投票数自动将某一个从库转换为新主库，继续对外服务。
+> * 哨兵（一般配置三台）的作用：俗称就是  无人值守运维
+>   * 监控Redis运行状态，包括master主机和slave从机
+>   * 当master宕机，能自动将slave切换为新的master
+>
+> Redis Sentinel能做什么（宏观层面Sentinel功能）：
+>
+> * Monitoring 主从监控：
+>   * Sentinel会不断地监控Redis主从运行是否正常
+> * Notification  消息通知：
+>   * Sentinel可将故障转移的结果发送给客户端
+> * Automatic failover 故障转移：
+>   * 若master异常，则会进行主从切换，将其中一个slave作为新的master
+> * Configuration provider  配置中心：
+>   * 客户端通过连接哨兵来获得当前Redis服务的主节点地址
+
+### Redis Sentinel案例演示
+
+> 前提说明  Redis Sentinel架构：
+>
+> * 三个哨兵（官方建议，哨兵一定要配集群也就是开启多个哨兵）：自动监控和维护集群，不能存放数据，只是吹哨人
+> * 一主两从：用于数据读取和存放
+>
+> 案例步骤：
+>
+> * Redis安装目录下默认的sentinel.conf文件（这里是/opt/redis.../sentinel.conf）拷贝到/myredis目录（运行Redis服务）下进行配置
+>
+>   * 重点配置项参数说明：
+>     * sentinel monitor < master-name> < ip> < redis-port> < quorum>：设置要监控的master服务器
+>       * 默认是sentinel monitor mymaster 127.0.0.1 6379 2
+>       * quorum：确认客观下线的最少的哨兵数量（最少有几个哨兵认可客观下线，同意故障迁移的法定票数）
+>         * 意思是至少有quorum个Sentinel认为这个master有故障，才会对这个master进行下线以及故障转移
+>         * 网络是不可靠的，某个Sentinel节点可能因为自身网络等原因，无法连接master，而此时的master并未出现故障，所以就需要多个Sentinel都一致认为该master出现问题才可进行下一步操作，保证了公平性、高可用
+>     * sentinel auth-pass < master-name> < password>：连接master主机的密码
+>
+> * ==本次Redis Sentinel文件（sentinel.conf）通用配置：==
+>
+>   * 由于机器硬件关系，本应另起三台服务器来配置哨兵（哨兵默认端口号26379），这里将三个哨兵全部配置在master主机上
+>
+>   * 分别建立三个哨兵配置文件
+>
+>     * sentinel26379.conf、sentinel26380.conf、sentinel26381.conf；配置如下：
+>
+>       * ```sh
+>         bind 0.0.0.0
+>         daemonize yes
+>         protected-mode no
+>         port 26379
+>         logfile "/myredis/sentinel26379.log"
+>         pidfile /var/run/redis-sentinel26379.pid
+>         dir /myredis
+>         sentinel monitor mymaster 192.168.222.129 6379 2
+>         sentinel auth-pass mymaster 001214
+>         
+>         bind 0.0.0.0
+>         daemonize yes
+>         protected-mode no
+>         port 26380
+>         logfile "/myredis/sentinel26380.log"
+>         pidfile /var/run/redis-sentinel26380.pid
+>         dir /myredis
+>         sentinel monitor mymaster 192.168.222.129 6379 2
+>         sentinel auth-pass mymaster 001214
+>         
+>         bind 0.0.0.0
+>         daemonize yes
+>         protected-mode no
+>         port 26381
+>         logfile "/myredis/sentinel26381.log"
+>         pidfile /var/run/redis-sentinel26381.pid
+>         dir /myredis
+>         sentinel monitor mymaster 192.168.222.129 6379 2
+>         sentinel auth-pass mymaster 001214
+>         ```
+>
+> * 先启动Redis一主二从服务，测试正常的主从复制
+>
+>   * ==master主机redis6379.conf配置文件需要配置masterauth配置项==，因为后续可能会变为slave，需设置访问新主机的密码；
+>   * 两台slave：和之前一样配置有 “replicaof 主机IP  主机PORT” ，“masterauth “主机密码” ”
+>   * 在三台虚拟机下==启动一主二从Redis服务==
+>
+> * 以下是哨兵内容部分：
+>
+> ---------
+>
+> * ==启动三个哨兵，完成监控==：
+>   * redis-sentinel  /myredis/sentinel26379.conf  --sentinel
+>   * redis-sentinel  /myredis/sentinel26380.conf  --sentinel
+>   * redis-sentinel  /myredis/sentinel26381.conf  --sentinel
+>   * 启动哨兵完全不会影响主从复制的功能
+> * ==手动关闭master服务器，模拟master主机宕机==：
+>   * 问题思考：
+>     * 两台从机数据复制未宕机前master主机数据是否正常：
+>       * 数据正常
+>       * 细节（主机宕机后，从机键入命令例如get xxx会出现broken pipe或sever closed the connection异常）：
+>         * broken pipe表示对端的管道已经断开
+>           * 当该异常产生并没多少影响，可能是某个客户端突然中止了进程导致的错误
+>         * sever closed the connection
+>     * 是否会从剩余的两台从机选出新的主机
+>       * 会；哨兵投票选举
+>     * 之前宕机的master重启是什么情况
+>       * master宕机后，可以看到对应的sentinel日志（三个都可以看）中进行了重新选举，并将宕机的master转为slave和新选举的master主机设置为主从关系。
+> * 对比配置文件：
+>   * sentinel.conf会增多
+>   * 原始的master配置文件 redis6379.conf  末尾新增配置信息：
+>     * 新增replicaof配置项，配置了新主机的配置信息；
+>     * 还有Redis持久化RDB快照模式的备份条件save xxx xxx
+>   * 新选举出的master配置文件（例如redis6381.conf）：
+>     * 之前replicaof配置项配置的主机信息自动被清除了
+>     * 末尾也添加了信息 
+>   * 结论：
+>     * 配置文件内容，在运行期间会被Sentinel动态的进行修改
+>     * 主从切换之后，主机redis.conf、从机redis.conf、哨兵sentinel.conf配置文件中的内容都会发生改变：
+>       * 即原始主机会新增replicaof配置项，原始从机会去除replicaof配置项，哨兵配置文件的监控目标会随之调换
+>     * 其他备注：
+>       * 生产都是不同机房不同服务器，很少会出现三个哨兵全部进程全部挂掉的情况（本身也就是做主从监控、消息通知、故障转移这些操作的，不存在高并发这类情况，所以基本不会出现）
+>       * 哨兵也可以同时监控多个master（sentinelxxx.conf文件进行一行一个的配置即可，不常用）
+
+
+
+### 哨兵运行流程和选举原理
+
+> 中小厂配置：三个哨兵监控一主二从
+>
+> SDown主观下线：
+>
+> * SDown（主观不可用）是单个Sentinel自己主观检测到master的宕机状态；从哨兵Sentinel角度，若发送ping心跳后，一定时间内没收到合法回复，就达到了SDown的条件
+>   * 在Sentinel配置文件的down-after-milliseconds设置了判断主观下线的时间长度，默认30秒。
+>
+> ODown客观下线：
+>
+> * ODown需要一定数量的哨兵Sentinel，多个哨兵达成一致意见才能认为一个master主机客观上宕机。保证了公平性和高可用
+>   * quorum这个参数就是进行客观下线的一个依据；
+>
+> 选举领导者哨兵：
+>
+> * 当主节点被认定客观下线，各个哨兵节点会进行协商，会先选举出领导者哨兵节点（兵王）并由该领导者节点进行failover故障转移。（兵王促成slave>>>master）
+> * 哨兵领导者，兵王是如何被选出来的：
+>   * Raft算法：
+>     * 监视该主节点的所有哨兵都有可能称为领导者，Raft算法的基本思路就是先到先得：
+>       * 即在一轮选举中，哨兵A向B发送成为领导者的申请，若B未同意过其他哨兵，则会同意A称为领导者leader
+>         * 先选出leader哨兵领导者，然后在由leader选举出master（日志中是switch-master）
+>
+> 由leader哨兵领导者推动故障转移流程并选出一个新master：
+>
+> 1. 新主登基：
+>    1. 选出master规则：权限高>>>复制偏移量大（复制的多）>>>runID每个Redis运行会有一个ID，谁小选谁
+> 2. 群臣俯首
+>    1. slaveof no one
+> 3. 旧主拜服
+>
+> 无人值守安装配置
+
+哨兵使用建议
+
+> 哨兵节点数量应为多个，奇数；本身应该是集群，保证高可用
+>
+> 各个哨兵节点配置应保持一致
+>
+> 若哨兵节点部署在Docker等容器中，尤其要注意端口的正确映射
+>
+> 哨兵集群 + 主从复制，并不能保证数据零丢失（master断开后，投票和选举新master并不是瞬时的，写操作中断可能导致数据流失）：
+>
+> * 引出集群
+
+
+
+
+
+
+
 
 ## Redis集群（cluster）
 
+### Redis Cluster集群基本介绍
+
+> https://redis.io/docs/reference/cluster-spec/
+>
+> Redis集群是什么：
+>
+> * 由于数据量过大，单个master复制集难以承担，因此需要对多个复制集进行集群，形成水平扩展每个复制集值负责存储整个数据集的一部分，这就是Redis集群，作用就是提供在多个Redis节点间共享数据的程序集。
+> * 一句话：Redis集群是一个提供在多个Redis节点间共享数据的程序集，可支持多个master。
+>
+> Redis Cluster集群能做什么：
+>
+> * Redis Cluster支持多个master，每个master又可以挂载多个slave：
+>   * 读写分离；支持数据的高可用；支持海量数据的读写存储操作
+> * 由于Cluster集群自带Sentinel哨兵的故障转移机制，内置了高可用的支持，无需再去使用哨兵功能.
+> * 客户端与Redis的节点连接，无需连接集群中所有节点，只需任意连接集群中一个可用节点即可
+> * 槽位slot负责分配到各个物理服务节点，由对应的集群来负责维护节点、插槽和数据之间的关系
 
 
 
+### 集群算法-分片-槽位slot
+
+> Redis集群的槽位slot：
+>
+> * Redis集群没使用hash算法，而是使用了哈希槽的概念。
+>   * 槽位最多16384个；Redis集群官网建议1000个以内
+> * Redis集群有16384个哈希槽，每个key通过CRC16校验后对16384取模来决定放置哪个槽。集群每个节点负责一部分槽
+>
+> Redis集群的分片：
+>
+> * 使用Redis集群我们会将存储的数据分散到多台Redis机器上，这称为分片。简言之，集群中每个Redis实例都被认为是整个数据的一个分片。
+> * 如何找到给定的分片：
+>   * 为了找到给定key的分片，我们对key进行CRC16(key)算法处理并通过对总分片数量取模。然后，使用确定性哈希函数，这意味着给定的key将多次始终映射到同一个分片，我们可以推断将来读取特定key的位置。
+>
+> Redis集群的槽位和分片的优势：
+>
+> * 最大优势就是方便扩缩容和数据分派查找。
+> * 这种结构很容易添加或删除节点：从一个节点将哈希槽移动到另一个节点并不会停止服务，所以无论删除或改变某个节点哈希槽的数量都不会造成集群不可用
+>
+> slot槽位映射（三种业界解决方案）：
+>
+> * 哈希取余分区（小厂）：
+>   * hash(key)/Redis机器数量
+>   * 优点：简单直接，只需要确认好节点数量；负载均衡、分而治之
+>   * 缺点：扩缩容麻烦，某个Redis机器宕机，由于机器数量发生变化，导致hash取余全部数据重新洗牌
+> * 一致性哈希算法分区（中厂）：
+>   * 当服务器个数发生变动尽量减少影响客户端到服务器的映射关系。
+>   * 三大步骤：
+>     * 算法构建一致性哈希环：
+>       * 它也是按照使用取模的方法，前面笔记介绍的节点取模法是对节点（服务器）的数量进行取模。而一致性Hash算法是对2^32取模，简单来说，一致性Hash算法将整个哈希值空间组织成一个虚拟的圆环；
+>       * 把这个由2^32个点组成的圆环称为Hash环
+>     * redis服务器IP节点映射：
+>     * key落到服务器的落键规则：
+>   * 优点：具备容错性、扩展性
+>   * 缺点：数据倾斜问题（被缓存的对象大部分集中缓存在某一台服务器上）
+> * 哈希槽分区（大厂）：
+>   * HASH_SLOT = CRC16(key) mod 16384
+>   * 哈希槽实质就是一个数组，数组[0,2^14 -1]形成hash slot空间。
+>   * 解决均匀分配的问题，在数据和节点之间又加入了一层，把这层称为哈希槽（slot），用于管理数据和节点之间的关系，现在就相当于节点上放的是槽，槽里放的是数据。
+>   * 槽解决的是粒度问题，相当于把粒度变大了，这样便于数据移动。哈希解决的是映射问题，使用key的哈希值来计算所在的槽，便于数据分配
+>
+> 经典面试题---为什么Redis集群的最大槽数是16384个：
+>
+> * 如果槽位65536，发送心跳信息的消息头达8k，发送心跳包过于庞大
+> * redis集群主节点数量基本不可能超过1000个，16384个槽位够用了
+> * 槽位越小，节点少的情况下，压缩比高，容易传输
+>
+> Redis集群不保证强一致性，意味着在特定条件下，Redis集群可能丢失掉一些被系统收到的写入请求命令
+
+
+
+
+
+
+
+
+
+
+
+### Redis Cluster集群案例演示
 
 
 
