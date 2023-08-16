@@ -1515,13 +1515,350 @@ Redis是一种KV键值对类型的缓存数据库
 
 
 
-
-
-
-
-
-
 ### Redis Cluster集群案例演示
+
+#### 三主三从Redis集群配置
+
+> 三台Linux虚拟机上，==新建集群目录/myredis/cluster==
+>
+> * mkdir -p /myredis/cluster
+>
+> 新建六个独立的Redis实例服务
+>
+> * 由于机器硬件限制，这里三个Linux虚拟机分别创建一主一从达到三主三从的Redis服务；
+>
+> * ==创建集群配置文件：==
+>
+>   * 例如IP 129的Linux上，新建两个Redis集群配置文件
+>
+>     * vim /myredis/cluster/redisCluster6381.conf   vim /myredis/cluster/redisCluster6382.conf
+>
+>     * ```sh
+>       bind 0.0.0.0
+>       daemonize yes
+>       protected-mode no
+>       port 6381
+>       logfile "/myredis/cluster/cluster6381.log"
+>       pidfile /myredis/cluster6381.pid
+>       dir /myredis/cluster
+>       dbfilename dump6381.rdb
+>       appendonly yes
+>       appendfilename "appendonly6381.aof"
+>       requirepass 001214
+>       masterauth 001214
+>        
+>       cluster-enabled yes
+>       cluster-config-file nodes-6381.conf
+>       cluster-node-timeout 5000
+>       ```
+>
+>   * ==启动六台Redis主机实例：==
+>
+>     * redis-server /myredis/cluster/redisCluster6381.conf
+>     * ........
+>
+> 通过redis-cli命令为6台Redis构建集群关系：
+>
+> * ==构建主从关系命令（注意自己的真实IP，防火墙端口一定要放开）：==
+>
+>   * ```sh
+>     6381 16381
+>     6382 16382
+>     6383 16383
+>     6384 16384
+>     6385 16385
+>     6386 16386
+>     这些端口必须全部开放才能进行集群的创建！！！
+>     ```
+>
+>   * ```sh
+>     redis-cli -a 001214 --cluster create --cluster-replicas 1 192.168.222.129:6381 192.168.222.129:6382 192.168.222.130:6383 192.168.222.130:6384 192.168.222.131:6385 192.168.222.131:6386
+>     
+>     redis-cli -a 001214
+>     --cluster create：集群形式的创建
+>     --cluster-replicas 1：表示为每个master创建一个slave节点
+>     
+>     集群连接成功后 集群配置文件中cluster-config-file配置项指定的文件（nodes-6381.conf）会生成
+>     ```
+>
+> ==链接进入6381作为切入点，查看并检验集群状态：==
+>
+> * 登录Redis：redis-cli -a 001214 -p 6381
+> * cluster nodes：查看集群节点关系拓扑图指令
+> * cluster info
+
+
+
+#### 三主三从Redis集群读写
+
+> 对6381新增两个key，查看效果：
+>
+> * 为什么会报错：
+>   * 一定要注意槽位的范围区间，需要路由到位
+> * 如何解决：
+>   * 防止路由失效加参数-c，优化路由：==redis-cli -a 001214 -p 6381 -c==
+>     * 之后连接Redis集群，-c避免路由失效
+> * 查看某个key对应的槽位值：
+>   * cluster keyslot 键名称
+
+
+
+#### 主从容错切换迁移案例
+
+> 容错切换迁移-------master主机停掉，对应的真实的slave会不会切换为master：
+>
+> * 首先确认该主机对应的真实从机是哪一台：cluster nodes指令
+> * master主机停止后，再次查看集群信息：cluster nodes ；
+>   * 可以看到被停掉的主机断开连接，对应的真实从机已被切换为master主机
+> * 原始master再次重新连接启动，已自动切换为slave（info replication指令或cluster nodes指令都可以看到信息）
+>
+> 集群不保证数据一致性100%ok，一定会有数据丢失情况（写丢失的情况）
+>
+> 手动故障转移（节点从属调整）该如何处理：
+>
+> * 上面的当某个master停掉后，对应的真实slave会被切换为master；原master重启后会被自动切换为slave；如何再次将这两个主从关系对调：
+>   * 登录原master
+>   * ==cluster failover：手动进行集群的故障转移，也就是集群的节点从属调整。完成主从切换==
+
+
+
+#### 主从扩容案例
+
+> 三主三从的Redis集群扩容为四主四从：
+>
+> * ==新建6387、6388两个服务实例配置文件并启动：==
+>
+>   * vim /myredis/cluster/redisCluster6387.conf：还是使用最初创建集群的实例配置文件
+>   * redis-server /myredis/cluster/redisCluster6387.conf：此时这两个都是master主机
+>
+> * ==将新增的6387节点（空槽号）作为master节点加入原集群（必须先开放节点端口和对应的总线端口）：==
+>
+>   * ```sh
+>     开放端口！！！！！
+>     6387端口 总线端口16377
+>     6388 16388
+>     
+>     redis-cli -a 001214 --cluster add-node 192.168.222.131:6387 192.168.222.129:6381
+>     
+>     将新增的6387作为master节点加入原有集群
+>     redis-cli -a 密码 --cluster add-node 自己实际IP地址:6387 自己实际IP地址:6381
+>     6387 就是将要作为master新增节点
+>     6381 就是原来集群节点里面的领路人，相当于6387拜拜6381的码头从而找到组织加入集群
+>     ```
+>
+> * ==检查集群情况第一次：cluster nodes==
+>
+>   * ```sh
+>     redis-cli -a 001214 --cluster check 192.168.222.129:6381
+>     ```
+>
+>   * 可以看到新增的6387master暂时并未分配到槽号slot
+>
+> * ==重新分配槽号：reshard==
+>
+>   * ```sh
+>     重新分派槽号
+>     命令:redis-cli -a 密码 --cluster reshard IP地址:端口号
+>     redis-cli -a 001214 --cluster reshard 192.168.222.129:6381
+>     
+>     会提示想分配多少槽号：4096（四个主机均分）
+>     会提示由谁来接收：将6387的id粘贴过来
+>     all
+>     yes
+>     ```
+>
+> * ==检查集群情况第二次：cluster nodes==
+>
+>   * ```sh
+>     redis-cli -a 001214 --cluster check 192.168.222.129:6381
+>     ```
+>
+>   * 可以看到新增的6387master已分配到槽号slot（4096个槽位）
+>
+>     * 为什么6387是3个新的槽位区间，以前的还是连续？重新分配成本太高，所以前3家各自匀出来一部分，从6381/6383/6385三个旧节点分别匀出1364个坑位给新节点6387
+>
+>   * 0 slave
+>
+> * ==为主节点6387分配从节点6388==
+>
+>   * ```sh
+>     命令：
+>     redis-cli -a 密码 --cluster add-node ip:新slave端口 ip:新master端口 --cluster-slave --cluster-master-id 新主机节点ID
+>      
+>     redis-cli -a 001214 --cluster add-node 192.168.222.131:6388 192.168.222.131:6387 --cluster-slave --cluster-master-id 2e754665b9d3346fc72654dbb3b67129cd14717a-------这个是6387的编号，按照自己实际情况
+>     ```
+>
+> * ==检查集群情况第三次：cluster nodes==
+>
+>   * ```sh
+>     redis-cli -a 001214 --cluster check 192.168.222.129:6381
+>     ```
+>
+>   * 有一个slave
+
+
+
+#### 主从缩容案例
+
+> Redis集群缩容，删除6387和6388，恢复三主三从：
+>
+> * 先清除6388从节点；清出来的槽号重新分配给6381；再删除6387；恢复三主三从
+>
+> ==检查集群情况第一次，先获取节点6388节点ID：cluster nodes==
+>
+> * ```sh
+>   redis-cli -a 001214 --cluster check 192.168.222.129:6381
+>   ```
+>
+> ==从集群中将6388从节点删除：==
+>
+> * ```sh
+>   命令：redis-cli -a 密码 --cluster del-node ip:从机端口 从机6388节点ID
+>    
+>   redis-cli -a 001214 --cluster del-node 192.168.222.131:6388 e85ff301210617b88157bc79835096fd760918dc
+>   ```
+>
+> * redis-cli -a 001214 --cluster check 192.168.222.129:6381：检查集群情况可以看到当前集群只有七台机器
+>
+> ==将6387槽号清空重新分配（这里全部分配给6381）：==
+>
+> * ```sh
+>   redis-cli -a 001214 --cluster reshard 192.168.222.129:6381
+>   
+>   4096
+>   接收ID：6381的id
+>   原id：6387的id
+>   done
+>   yes
+>   ```
+>
+> ==检查集群情况第二次：cluster nodes==
+>
+> * ```sh
+>   redis-cli -a 001214 --cluster check 192.168.222.129:6381
+>   ```
+>
+> * 此时会有三主四从，6387变成了6381的从机
+>
+> ==删除6387：==
+>
+> * ```sh
+>   命令：redis-cli -a 密码 --cluster del-node ip:从机端口 从机6388节点ID
+>    
+>   redis-cli -a 001214 --cluster del-node 192.168.222.131:6387 2e754665b9d3346fc72654dbb3b67129cd14717a
+>   ```
+>
+> ==检查集群情况第三次：cluster nodes==
+>
+> * ```sh
+>   redis-cli -a 001214 --cluster check 192.168.222.129:6381
+>   ```
+>
+> * 三主三从（就是6381槽位多一些）
+
+
+
+
+
+### 集群常用操作命令和CRC16算法分析
+
+> 不在同一个槽位slot下的多键（例如mset、mget）操作不支持，引出占位符：
+>
+> * 可通过{ }来定义同一个组的概念，使key中{ }相同内容的键值对放在同一个slot槽位
+>
+>   * ```sh
+>     mset k1{z} z1 k2{z} z2 k3{z} z3
+>     
+>     mget k1{z} k2{z} k3{z}
+>     ```
+>
+> Redis集群有16384个哈希槽，每个key通过CRC16校验后对16384取模来决定放置在哪个槽，集群的每个节点负责一部分哈希槽。
+>
+> 常用命令：
+>
+> * 集群是否完整才能对外提供服务：
+>
+>   * cluster-require-full-coverage   yes  （默认就是yes，推荐也是yes）
+>
+>   * 默认YES，现在集群架构是3主3从的redis cluster由3个master平分16384个slot，每个master的小集群负责1/3的slot，对应一部分数据。
+>
+>     cluster-require-full-coverage： 默认值 yes , 即需要集群完整性，方可对外提供服务 通常情况，如果这3个小集群中，任何一个（1主1从）挂了，你这个集群对外可提供的数据只有2/3了， 整个集群是不完整的， redis 默认在这种情况下，是不会对外提供服务的。
+>
+>   * 如果你的诉求是，集群不完整的话也需要对外提供服务，需要将该参数设置为no ，这样的话你挂了的那个小集群是不行了，但是其他的小集群仍然可以对外提供服务。
+>
+> * cluster countkeysinslot  槽位数字编号：
+>
+>   * 判断指定槽位是否被key占用，0没占用
+>
+> * cluster keyslot 键名称：
+>
+>   * 该键应该存在哪个槽位上
+>
+> * cluster nodes：获取每个节点信息
+
+
+
+
+
+## SpringBoot集成Redis
+
+> Jedis、Lettuce、RedisTemplate三者的联系
+>
+> 本地Java连接Redis常见问题：
+>
+> * bind配置注释掉
+> * protected-mode保护模式设置no
+> * Linux系统的防火墙白名单设置
+> * Redis服务器IP地址和密码
+> * 访问Redis服务器的PORT和auth密码
+
+### 集成Jedis
+
+> Jedis是什么：
+>
+> * Jedis Client是Redis官网推荐的一个面向Java客户端，库文件实现了对各类API进行封装调用
+>
+> 集成步骤：
+>
+> * 创建Module
+> * POM文件配置
+>   * 引入jedis依赖
+> * YML文件配置
+> * 主启动类
+> * 业务类
+
+
+
+### 集成Lettuce
+
+> Lettuce是什么：
+>
+> * Lettuce是一个Redis的Java驱动包
+>
+> Jedis和Lettuce区别：
+>
+> * 都可以连接Redis服务器，但在SpringBoot2.0之后默认都是使用的Lettuce这个客户端连接Redis服务器，Lettuce底层使用的Netty，线程安全的
+
+
+
+### 集成RedisTemplate-推荐
+
+#### 连接单机
+
+> 序列化问题：
+>
+> 1. 使用StringRedisTemplate类，解决了序列化问题
+> 2. 使用RedisTemplate类，但要在配置类定义序列化的工具
+
+
+
+
+
+#### 连接集群
+
+> 
+
+
 
 
 
