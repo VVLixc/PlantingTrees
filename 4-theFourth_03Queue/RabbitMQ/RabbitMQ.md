@@ -232,13 +232,7 @@ RabbitMQ 3.8.8
 
 ### 消息生产者
 
-
-
-
-
 ### 消息消费者
-
-
 
 
 
@@ -246,9 +240,167 @@ RabbitMQ 3.8.8
 
 ## Work Queues
 
+> Work Queues工作队列模式（又称作任务队列）
+
+### 轮训分发消息
+
+> 轮询分发消息就是多个消费者接收生产者的消息时，会一个个排好队进行消息的接收（你一条我一条，不会出现分配不均的情况）
+>
+> 一个消息只能处理一次，不可以处理多次。
+>
+> 工作线程（消费者）之间处于竞争的关系
+>
+> 此案例中会启动两个工作线程（工作线程就是消费者）
+>
+> 抽取工具类：
+>
+> * 因为每个Producer/Consumer的创建都会创建连接工厂并创建信道；将这些重复代码抽取出来。
 
 
 
+### 消息应答
+
+> 消息应答概念：
+>
+> * 为了保证消息在发送过程中不会丢失，RabbitMQ引入了消息应答机制：
+>   * 消费者在接收到消息并处理该消息之后，告诉RabbitMQ它已经处理了，RabbitMQ可以把消息删除了。
+>
+> 自动应答（不推荐，尽量使用手动应答）：
+>
+> * 自动应答并不完善；需要在高吞吐量和数据传输安全性两者之间做权衡；
+>   * 若消息在接收到之前，消费者那边出现连接或Channel关闭，消息就会丢失了
+> * 该模式仅适用在消费者可以高效并以某种速率能够处理这些消息的情况下使用。
+> * 默认消息采用的自动应答
+>
+> 手动应答：
+>
+> * channel.basicAck：用于肯定确认
+>   * RabbitMQ接收到该消息成功处理的信息，可以将其丢弃了
+> * channel.basicNack：用于否定确认
+> * channel.basicReject：用于否定确认
+>   * Reject（拒绝）与basicNack相比少一个参数（是否批量处理的参数multiple）
+>   * 不处理该消息了 直接拒绝，可将其丢弃了
+>
+> Multiple的解释：
+>
+> * 手动应答的好处就是可以批量应答并且减少网络阻塞；
+> * channel.basicAck(xxxxx, true)；此处的true就表示批量应答
+> * 例如信道中有5,6,7,8四个消息，当接收8并完成处理后，
+>   * multiple为true时，表示5,6,7,8都会被确认应答
+>   * multiple为false时，5,6,7不会被确认应答，只有8会被确认应答（建议使用false，可保证消息最大程度不丢失）
+>
+> 消息应答重新入队（消息自动重新入队）：
+>
+> * 若消费者由于某些原因失去连接，导致消息未发送ACK确认，RabbitMQ就会自动对其进行重新排队。
+>   * 这样其他消费者一样可以处理；
+>   * 所以即使某个消费者偶尔死亡，也可以确保不丢失任何消息。
+>
+> 消息手动应答Demo：
+>
+> * 消息默认采用的自动应答，需改为手动应答（消息手动应答可保证消息不丢失，未ACK确认的消息会 被自动重新入队）
+>
+> * 生产者：
+>
+>   * ```java
+>     public class ProducerAck {
+>         public static final String QUEUE_NAME="Ack_Queue";
+>         public static void main(String[] args) throws Exception {
+>             Channel channel = RabbitMQUtils.getChannel();
+>             //创建队列
+>             channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+>             Scanner scanner = new Scanner(System.in);
+>             while (scanner.hasNext()){
+>                 String message=scanner.next();
+>                 System.out.println("生产者消息："+message);
+>                 channel.basicPublish("", QUEUE_NAME, null, message.getBytes(StandardCharsets.UTF_8));
+>             }
+>         }
+>     }
+>     ```
+>
+> * 消费者01：
+>
+>   * ```java
+>     public class ConsumerAck01 {
+>         public static final String QUEUE_NAME="Ack_Queue";
+>         public static void main(String[] args) throws Exception{
+>             Channel channel = RabbitMQUtils.getChannel();
+>             boolean autoAck=false;
+>             DeliverCallback deliverCallback= (consumerTag, message) -> {
+>                 SleepUtils.sleep(1);
+>                 System.out.println("接收到消息"+new String(message.getBody()));
+>                 channel.basicAck(message.getEnvelope().getDeliveryTag(), false);
+>             };
+>             CancelCallback cancelCallback= consumerTag -> System.out.println("消费者取消消费接口回调逻辑");
+>             System.out.println("消费者01---等待接收消息（手动应答功能测试）...");
+>             channel.basicConsume(QUEUE_NAME,autoAck,deliverCallback,cancelCallback);
+>         }
+>     }
+>     ```
+>
+> * 消费者02：
+>
+>   * ```java
+>     public class ConsumerAck02 {
+>         public static final String QUEUE_NAME="Ack_Queue";
+>         public static void main(String[] args) throws Exception{
+>             Channel channel = RabbitMQUtils.getChannel();
+>             boolean autoAck=false;
+>             DeliverCallback deliverCallback= (consumerTag, message) -> {
+>                 SleepUtils.sleep(30);
+>                 System.out.println("接收到消息"+new String(message.getBody()));
+>                 channel.basicAck(message.getEnvelope().getDeliveryTag(), false);
+>             };
+>             CancelCallback cancelCallback= consumerTag -> System.out.println("消费者取消消费接口回调逻辑");
+>             System.out.println("消费者02---等待接收消息（手动应答功能测试）...");
+>             channel.basicConsume(QUEUE_NAME,autoAck,deliverCallback,cancelCallback);
+>         }
+>     }
+>     ```
+>
+> * 正常情况下消息发送方发送两个消息 C1 和 C2 分别接收到消息并进行处理
+>
+>   * 在发送者发送消息 dd，发出消息之后的把 C2 消费者停掉，按理说该 C2 来处理该消息，但是由于它处理时间较长，在还未处理完，也就是说 C2 还没有执行 ack 代码的时候，C2 被停掉了，此时会看到消息被 C1 接收到了，说明消息 dd 被重新入队，然后分配给能处理消息的 C1 处理了
+
+
+
+
+### RabbitMQ持久化
+
+> 概念：
+>
+> * 表示消息是可以进行持久化存储的，可以将队列和消息都标记为持久化。
+> * 持久化的目的就是保障了当RabbitMQ服务宕机以后不让消息丢失，能够在RabbitMQ中保存消息。
+>
+> 队列如何实现持久化：
+>
+> * channel.queueDeclare方法中boolean durable参数，true开启队列的持久化。
+> * 需要注意若之前队列不是持久化，需先删除原队列，或重新创建一个新队列，否则可能出现错误。
+>   * 可直接在Web界面选择某队列下拉delete删除
+> * 持久化开启在Web界面Queue页面下Features会显示D（Durable）字样；此后即使重启RabbitMQ队列也依然存在
+>
+> 消息实现持久化：
+>
+> * 生产者channel.basicPublish方法AMQP.BasicProperties props参数来实现消息的持久化
+>   * MessageProperties.PERSISTENT_TEXT_PLAIN
+>   * 设置生产者发送消息为持久化消息，保存到磁盘上（不指定就是保存在内存中，随时可能会丢失）
+> * 将消息标记为持久化并不能完全保证不会丢失消息。尽管它告诉 RabbitMQ 将消息保存到磁盘，但是这里依然存在当消息刚准备存储在磁盘的时候 但是还没有存储完，消息还在缓存的一个间隔点。此时并没有真正写入磁盘。持久性保证并不强，但是对于我们的简单任务队列而言，这已经绰绰有余了。如果需要更强有力的持久化策略，参考后边课件发布确认章节。
+>
+> 不公平分发：
+>
+> * 之前提到的轮训分发（RabbitMQ分发消息的默认机制），某种场景下策略不是很好，比如两个消费者，A处理非常快，B处理非常慢，那么如果采用轮训分发机制的话，A就会处于空闲状态。
+> * 不公平分发（能者多劳）：消费者在接收消息之前设置 channel.basicQos(1)
+>   * 在Channels下面消费者Prefetch count：！
+> * 意思就是如果这个任务我还没有处理完或者我还没有应答你，你先别分配给我，我目前只能处理一个任务，然后 rabbitmq 就会把该任务分配给没有那么忙的那个空闲消费者，当然如果所有的消费者都没有完成手上任务，队列还在不停的添加新任务，队列有可能就会遇到队列被撑满的情况，这个时候就只能添加新的 worker 或者改变其他存储任务的策略。
+>
+> 预取值：
+>
+> * 轮训分发就是你一条我一条的处理，不公平分发就是能者多劳，预取值（prefetch）就是指定分给消费者多少
+>   * 指定预取值和不公平分发都是在消费者中使用同一个方法：channel.basicQos(int xxx)；
+>     * 不设定就是轮询分发
+>     * 1就是不公平分发
+>     * 其他就是预取值分发
+> * 预取值指的是消息堆积在信道中，而不是说例如7个值指定消费A预取值2，A就肯定只接收两条，而是A信道中堆积了2条
 
 
 
