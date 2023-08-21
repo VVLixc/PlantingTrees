@@ -406,7 +406,62 @@ RabbitMQ 3.8.8
 
 ## 发布确认
 
+### 发布确认原理
 
+> 发布确认是解决消息不丢失的关键点。
+>
+> 持久化：
+>
+> 1. 设置队列持久化
+> 2. 设置消息持久化
+> 3. 发布确认
+>    * 发布确认就是由生产者产生的消息，发送到队列之后将消息保存到磁盘之后，MQ再将保存成功的信息通知生产者
+>
+
+
+
+### 发布确认策略
+
+> 开启发布确认的方法：
+>
+> * 发布确认在RabbitMQ默认没有开启，若开启发布确认通过调用channel.confirmSelect()方法（在生产者信道开启发布确认）。
+>
+> 单个确认发布：
+>
+> * 是同步确认发布的方式，发布一个消息只有它被确认发布，后续的消息才能继续发布
+>   * channel.waitForConfirms()；
+> * 缺点就是发布速度特别慢
+>
+> 批量确认发布：
+>
+> * 与单个确认发布消息相比，先发布一批消息然后一起确认可极大提高吞吐量；也是同步确认发布的方式（阻塞消息的发布）
+> * 缺点就是当发生故障导致批量确认发布出现问题，不知道是哪个消息出现了问题；这样就必须将整个批处理保存在内存中，已记录重要的信息而后重新批量确认发布消息。
+>
+> 异步确认发布：
+>
+> * 异步确认发布编程逻辑要比以上两个复杂，但性价比最高，可靠性高、效率高；
+> * 利用回调函数来达到消息可靠性传递，通过函数回调来保证是否投递成功
+> * ![image-20230821171556022](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20230821171556022.png)
+> * channel.addConfirmListener( ConfirmCallback ackCallback, ConfirmCallback nackCallback )；
+>
+> 如何处理异步未确认消息：
+>
+> * 并发链路式队列：ConcurrentLinkedQueue
+>   * 线程安全有序的哈希表，适用于高并发的场景：
+>     * 可轻松将序号和消息进行关联
+>     * 轻松批量删除条目，只要给到序号
+>     * 支持高并发（多线程）
+>
+> 以上三种发布确认速度对比：
+>
+> 三种发布确认方式总结：
+>
+> * 单个确认发布：
+>   * 同步等待确认；简单但吞吐量非常有限
+> * 批量确认发布：
+>   * 批量同步等待确认；简单合理的吞吐量，一旦出问题还需推断出那条消息出现了问题再重新发布
+> * 异步确认发布：
+>   * 最佳性能和资源使用，出现错误情况还可以很好控制，实现相对复杂
 
 
 
@@ -414,7 +469,238 @@ RabbitMQ 3.8.8
 
 ## 交换机
 
+### Exchanges
 
+> ==不指定交换机，默认就是AMQP default；通过默认交换机路由到指定的队列。==
+>
+> 之前了解的是==一个消息只能被消费一次（消费者之间处于竞争关系）==。
+>
+> * 其实==真正指的是一个队列的一个消息只能被消费一次==；但如果==交换机将一个消息发送给多个队列，多个队列再发送给多个消费者，就可以实现一个消息被消费多次的功能。（发布/订阅模式）==
+> * 之前了解到的简单模式、工作模式，这次使用到了交换机就是发布、订阅模式。
+>
+> **交换机Exchanges概念：**
+>
+> * RabbitMQ消息队列核心思想就是：
+>   * ==生产者生产的消息从不会直接发送到队列（之前没定义交换机则使用的AMQP default默认交换机）。==
+>   * ==生产者只能将消息发送到交换机exchange==
+>   * ==它一方面接收来自生产者的消息，另一方面会将消息推送到队列中。==
+>   * ==交换机必须确切清楚如何处理接收到的消息，是将消息推送到特定队列还是多个队列亦或是将消息丢弃；是由交换机类型决定的。==
+>     * 交换机类型：发布订阅模式、路由模式、主题模式
+>
+> 交换机Exchanges的类型：
+>
+> * 直接Direct（路由类型）
+> * 主题Topic（主题类型）
+> * 标题Headers（不常用了）
+> * 扇出Fanout（就是发布订阅类型）
+> * 无名exchange类型：通常用""空串进行标识
+>   * 之前就是使用的该默认交换机；
+>   * 消息能够路由发送到队列中，其实是由routingKey（bindingkey）绑定key指定的。
+>     * 没有指定交换机，routingKey就是指的队列名称
+
+
+
+
+### 临时队列
+
+> 临时队列就是队列未实现持久化（durable=false），一旦断开了消费者的连接，队列将被自动删除（Web界面D标识就是持久化队列）。
+>
+> 创建临时队列：
+>
+> * String queueName = channel.queueDeclare().getQueue();
+> * 可以在Web界面看到队列中AD Exd标识
+
+
+
+### 绑定Bindings
+
+> 绑定就是交换机与队列之间的捆绑关系；
+>
+> 通过指定RoutingKey来进行区别对待
+
+
+
+### Fanout
+
+> 介绍：
+>
+> * Fanout扇出就是发布订阅模式（RabbitMQ六大核心模式）
+> * 该类型就是将接收到的所有消息广播到它知道的所有队列中。
+>
+> fanout扇出交换机（发布订阅模式）Demo：
+>
+> * ```java
+>   public class ProducerOne {
+>       public static final String EXCHANGE_NAME = "custom_exchange";
+>   
+>       public static void main(String[] args) throws Exception {
+>           Channel channel = RabbitMQUtils.getChannel();
+>           // 声明交换机（交换机名称和交换机类型）
+>           channel.exchangeDeclare(EXCHANGE_NAME, "fanout");
+>           Scanner scanner = new Scanner(System.in);
+>           while (scanner.hasNext()) {
+>               String message = scanner.next();
+>               System.out.println("生产者声明fanout类型交换机 " + EXCHANGE_NAME + " 发送消息：" + message);
+>               channel.basicPublish(EXCHANGE_NAME, "", null, message.getBytes(StandardCharsets.UTF_8));
+>           }
+>       }
+>   }
+>   
+>   
+>   public class ConsumerOne {
+>       public static final String EXCHANGE_NAME = "custom_exchange";
+>   
+>       public static void main(String[] args) throws Exception {
+>           Channel channel = RabbitMQUtils.getChannel();
+>           // 声明交换机（交换机名称、类型）
+>           channel.exchangeDeclare(EXCHANGE_NAME, "fanout");
+>           // 声明一个临时队列（消费者断开和该队列的连接，队列将被自动删除）。队列名称随机
+>           String queueName = channel.queueDeclare().getQueue();
+>           //绑定（交换机和队列之间的绑定）：队列名，交换机明，RoutingKEY（也称之为BindingKey）
+>           channel.queueBind(queueName, EXCHANGE_NAME, "");
+>           System.out.println("消费者One等待接收消息（发布订阅模式---fanout类型交换机）......");
+>           channel.basicConsume(queueName, true,
+>                   (String consumerTag, Delivery message) ->
+>                           System.out.println("消费者One接收的消息：" + new String(message.getBody(), StandardCharsets.UTF_8)),
+>                   consumerTag -> System.out.println("消费者One取消消费者接口回调逻辑"));
+>       }
+>   }
+>   ```
+
+
+
+### Direct exchange
+
+> Direct exchange直接交换机---路由模式
+>
+> 队列只对绑定他的交换机的消息感兴趣。
+>
+> 直接交换机和扇出交换机区别：
+>
+> * RoutingKey（交换机和队列之间的绑定），
+>   * 交换机和多个队列之间RoutingKey相同即消息都能收到就是扇出交换机（发布订阅模式）
+>   * 交换机和多个队列之间RoutingKey不同，就是直接交换机（路由模式）
+>
+> 多重绑定：
+>
+> * 支持多重绑定，也就是绑定的RoutingKey支持不同的
+> * 当然若交换机绑定类型是direct，但它绑定的多个队列的RoutingKey如果都相同，这样虽然绑定类型是direct但他的表现和fanout相似就和广播差不多。
+>
+> direct直接交换机（路由模式）Demo：
+>
+> * ```java
+>   public class Producer {
+>       public static final String EXCHANGE_NAME = "direct_exchange";
+>   
+>       public static void main(String[] args) throws Exception {
+>           Channel channel = RabbitMQUtils.getChannel();
+>           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.DIRECT);
+>           Scanner scanner = new Scanner(System.in);
+>           while (scanner.hasNext()) {
+>               String message = scanner.next();
+>               System.out.println("生产者声明direct类型直接交换机 " + EXCHANGE_NAME + " 发送消息：" + message);
+>               channel.basicPublish(EXCHANGE_NAME, "error", null, message.getBytes(StandardCharsets.UTF_8));
+>           }
+>       }
+>   }
+>   
+>   public class ConsumerOne {
+>       public static final String EXCHANGE_NAME = "direct_exchange";
+>   
+>       public static void main(String[] args) throws Exception {
+>           Channel channel = RabbitMQUtils.getChannel();
+>           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.DIRECT);
+>           channel.queueDeclare("queueOne", false, false, false, null);
+>           channel.queueBind("queueOne", EXCHANGE_NAME, "info");
+>   
+>           System.out.println("消费者One等待接收消息（通知模式---direct类型直接交换机）......");
+>           channel.basicConsume("queueOne", true,
+>                   (consumerTag, message) -> System.out.println("消费者One接收消息：" + new String(message.getBody(), StandardCharsets.UTF_8)),
+>                   consumerTag -> System.out.println("消费者One取消消费者接口回调逻辑"));
+>       }
+>   }
+>   ```
+
+
+
+### Topics
+
+> Topics主题交换机要比扇出交换机和直接交换机更加的完美。
+>
+> Topic规范：
+>
+> * 主题交换机的RoutingKey不能随意写，必须是一个单词列表，以. 点分隔（例如"cat.foot","dog.mouth"）；单词列表最多不能超过255个字节
+>   * *（星号）可替换一个单词
+>   * #（井号）可以替代零个及多个单词
+> * 队列绑定关系注意点：
+>   * 当队列绑定关系是#，即该队列可接收所有数据，和fanout类似；
+>   * 队列绑定键中没有*和#，就和direct类似。
+>
+> Topic主题交换机Demo：
+>
+> * ```java
+>   public class Producer {
+>       public static final String EXCHANGE_NAME = "topic_exchange";
+>   
+>       public static void main(String[] args) throws Exception {
+>           Channel channel = RabbitMQUitls.getChannel();
+>           channel.exchangeDeclare(EXCHANGE_NAME, "topic");
+>   
+>           HashMap<String, String> hashMap = new HashMap<>();
+>           hashMap.put("quick.orange.rabbit", "被队列 Q1Q2 接收到");
+>           hashMap.put("lazy.orange.elephant", "被队列 Q1Q2 接收到");
+>           hashMap.put("quick.orange.fox", "被队列 Q1 接收到");
+>           hashMap.put("lazy.brown.fox", "被队列 Q2 接收到");
+>           hashMap.put("lazy.pink.rabbit", "虽然满足两个绑定但只被队列 Q2 接收一次");
+>           hashMap.put("quick.brown.fox", "不匹配任何绑定不会被任何队列接收到会被丢弃");
+>           hashMap.put("quick.orange.male.rabbit", "是四个单词不匹配任何绑定会被丢弃");
+>           hashMap.put("lazy.orange.male.rabbit", "是四个单词但匹配 Q2");
+>   
+>           for (String routingKey : hashMap.keySet()) {
+>               String message = hashMap.get(routingKey);
+>               System.out.println("生产者发送消息："+routingKey);
+>               channel.basicPublish(EXCHANGE_NAME, routingKey, null, message.getBytes(StandardCharsets.UTF_8));
+>           }
+>       }
+>   }
+>   
+>   public class Consumer01 {
+>       public static final String EXCHANGE_NAME = "topic_exchange";
+>       public static final String QUEUE_NAME="queue01";
+>   
+>       public static void main(String[] args) throws Exception {
+>           Channel channel = RabbitMQUitls.getChannel();
+>           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.TOPIC);
+>           channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+>           channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "*.orange.*");
+>           System.out.println("消费者01等待接收消息......");
+>           channel.basicConsume(QUEUE_NAME, true,
+>                   (String consumerTag, Delivery message) ->
+>                           System.out.println("绑定关系：" + message.getEnvelope().getRoutingKey() +
+>                                   " 获取的消息：" + new String(message.getBody(), StandardCharsets.UTF_8)),
+>                   consumerTag -> System.out.println("消费者取消消费者接口回调逻辑"));
+>       }
+>   }
+>   
+>   public class Consumer02 {
+>       public static final String EXCHANGE_NAME = "topic_exchange";
+>       public static final String QUEUE_NAME="queue02";
+>   
+>       public static void main(String[] args) throws Exception {
+>           Channel channel = RabbitMQUitls.getChannel();
+>           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.TOPIC);
+>           channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+>           channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "*.*.rabbit");
+>           channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "lazy.#");
+>           System.out.println("消费者02等待接收消息......");
+>           channel.basicConsume(QUEUE_NAME, true,
+>                   (String consumerTag, Delivery message) ->
+>                           System.out.println("绑定关系：" + message.getEnvelope().getRoutingKey() +
+>                                   " 获取的消息：" + new String(message.getBody(), StandardCharsets.UTF_8)),
+>                   consumerTag -> System.out.println("消费者取消消费者接口回调逻辑"));
+>       }
+>   }
+>   ```
 
 
 
