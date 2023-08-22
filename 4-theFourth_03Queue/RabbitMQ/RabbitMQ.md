@@ -532,7 +532,7 @@ RabbitMQ 3.8.8
 > * ```java
 >   public class ProducerOne {
 >       public static final String EXCHANGE_NAME = "custom_exchange";
->   
+>
 >       public static void main(String[] args) throws Exception {
 >           Channel channel = RabbitMQUtils.getChannel();
 >           // 声明交换机（交换机名称和交换机类型）
@@ -545,11 +545,12 @@ RabbitMQ 3.8.8
 >           }
 >       }
 >   }
->   
->   
+>   ```
+>
+>
 >   public class ConsumerOne {
 >       public static final String EXCHANGE_NAME = "custom_exchange";
->   
+>
 >       public static void main(String[] args) throws Exception {
 >           Channel channel = RabbitMQUtils.getChannel();
 >           // 声明交换机（交换机名称、类型）
@@ -565,6 +566,9 @@ RabbitMQ 3.8.8
 >                   consumerTag -> System.out.println("消费者One取消消费者接口回调逻辑"));
 >       }
 >   }
+>
+>   ```
+> 
 >   ```
 
 
@@ -708,6 +712,88 @@ RabbitMQ 3.8.8
 
 ## 死信队列
 
+### 死信的概念
+
+> 死信就是无法被消费的消息。
+>
+> 一般来说由Producer生产的消息投递到Broker中，Consumer再从Queue取出消息进行消费；但某些时候由于特殊原因导致Queue中的某些消息无法被消费，这些消息没有后续的处理就成为了死信，有死信自然就有死信队列。
+>
+> 应用场景：
+>
+> * 为保证订单业务的数据不丢失，需使用到RabbitMQ的死信队列机制，当消息消费发生异常将消息投入死信队列中。
+> * 用户商城下单成功并点击去支付后在指定时间内未支付自动取消订单。
+
+
+
+### 死信的来源
+
+> 消息TTL（Time to Live生存时间）过期；
+>
+> 队列达到最大长度（队列满了，无法在添加数据到MQ中）；
+>
+> 消息被拒绝（basicReject或basicNack）且requeue=false。
+
+
+
+### 死信Demo
+
+> 消费者：
+>
+> * 通过声明队列方法 中arguments参数，将普通队列消息成为死信之后转发到死信交换机
+>
+> * Map< String,Object > arguments
+>   * 设置成为死信的来源（原因）：---当然这个成分死信的来源可不写，由生产者来定义（更加灵活）
+>     * 过期时间：
+>       * //map.put( "x-message-ttl" , 10000 );//设置消息过期时间10S
+>   * 设置正常队列转发的死信交换机：
+>     * map.put( "x-dead-letter-exchange" , 声明的死信交换机);
+>   * 设置死信交换机和死信队列之间的RoutingKey：
+>     * map.put( "x-dead-letter-routing-key" , RoutingKey);
+>
+> 生产者：
+>
+> * 发布消息（basicPublish）时设定props参数：设置死信的来源
+>
+>   * 消息TTL（Time to Live生存时间）过期；
+>
+>     * ```java
+>       AMQP.BasicProperties props = new AMQP.BasicProperties().builder().expiration("10000").build();
+>       ```
+>
+>   * 队列达到最大长度（队列满了，无法在添加数据到MQ中）；
+>
+>     * 消费者在声明队列方法 中 ：arguments参数：
+>
+>       * ```
+>         arguments.put("x-max-length", 6);//表示队列最大承接6条消息
+>         ```
+>
+>     * 注意！！！若修改前队列已存在需先清除：队列参数属性被修改必须删除重新生成
+>
+>   * 消息被拒绝（basicReject或basicNack）且requeue=false；
+>
+>     * basicConsume方法
+>
+>       * autoAck设置false
+>
+>       * DeliverCallback中对消息进行判断拒绝：
+>
+>         * ```java
+>           (String consumerTag, Delivery message) -> {
+>               String msg = new String(message.getBody(), StandardCharsets.UTF_8);
+>               if("消息7".equals(msg)){
+>                    System.out.println("C1拒绝消息：" + msg);
+>                   channel.basicReject(message.xxx.gexxxTag(),false);
+>               }else{
+>                    System.out.println("C1接收消息：" + msg);
+>                   channel.basicAck(message.xxx.gexxxTag(),false);
+>               }
+>           }
+>           ```
+>
+>       * 
+
+
 
 
 
@@ -739,6 +825,7 @@ RabbitMQ 3.8.8
 
 
 ## RabbitMQ集群
+
 
 
 
