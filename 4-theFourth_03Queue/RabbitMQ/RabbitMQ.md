@@ -798,9 +798,106 @@ RabbitMQ 3.8.8
 
 
 
-
-
 ## 延迟队列
+
+### 延迟队列概念
+
+> 延迟队列就是死信队列其中的一种（就是造成死信队列的来源之一：消息TTL过期）
+>
+> 延迟队列内部是有序的，最重要的特性就体现在它的延时属性上，延迟队列中的元素是希望到达指定时间的前或后进行取出和处理。
+>
+> 简单来说，延迟队列就是用来存放需要在指定时间被处理的元素的队列。
+
+
+
+### 延迟队列使用场景
+
+> 1. 订单在一段时间内（例如十分钟）内未支付则自动取消。
+> 2. 新创建的店铺，若一段时间内（例如十天）都未曾上传商品，则自动发送消息提醒。
+> 3. 用户注册成功后，若一段时间内（例如三天）都未曾登录则进行短信提醒。
+> 4. 用户发起退款，若一段时间内（例如三天）都未曾得到处理则通知相关运营人员。
+> 5. 预定会议后，需在预定的时间点前一段时间内（例如十分钟）通知各个与会人员参加会议
+
+
+
+### RabbitMQ中的TTL
+
+> 
+
+
+
+### 整合SpringBoot
+
+> pom文件：
+>
+> * Web、Devtools、Lombok、Configuration
+> * fastjson、Swagger
+>
+> * 添加一个RabbitMQ的场景启动器。
+>
+> yaml配置文件：
+>
+> * spring.rabbitmq.host
+> * spring.rabbitmq.port
+> * spring.rabbitmq.username
+> * spring.rabbitmq.password
+>
+> 配置类：
+>
+> * Swagger配置类
+
+
+
+### 队列TTL
+
+> SpringBoot整合了RabbitMQ后，之前在消费者中声明的交换机、队列，现在只需在配置类中声明即可。
+>
+> 配置类（队列和交换机）：
+>
+> * 声明普通 & 死信交换机：
+>   * 直接交换机---return new DirectExchange( 交换机名称 )；
+> * 声明两个普通队列（只是消息的过期时间不同）：
+>   * return QueueBuilder.durable( 队列名 ).withArguments( 此处将定义死信交换机的信息Map放入 ).build()；
+>     * 死信交换机信息：设置死信交换机、设置死信RoutingKey、设置消息TTL
+> * 声明死信队列：
+>   * return QueueBuilder.durabel( 队列名 ).build()；
+> * 绑定（队列和交换机的绑定）：
+>   * 返回类型Binding；
+>   * 设置形参：将之前声明的队列Bean和交换机Bean传进来@Qualifier("")---该方式可直接和容器名进行捆绑
+>     * @Qualifier("bean名") Queue bean名/自定义
+>   * return BindingBuilder.bind( 队列名 ).to( 交换机名 ).with( 自定义RoutingKey )；
+>   * 需要绑定三个：队列A与交换机X，队列B和交换机X，死信队列D和死信交换机Y。
+>
+> 生产者---Controller层：
+>
+> * 依赖注入/属性注入：@Autowired	RabbitTemplate
+> * 生产者发送消息：rabbitTemplate.convertAndSend( 交换机名，RoutingKey，消息 );
+>
+> 消费者---consumer包：
+>
+> * @Component
+> * 接收消息注解：@RabbitListener( queues=队列名称 )
+> * 形参列表：Message消息（是amqp包的类），Channel信道（rabbitmq的包）
+
+
+
+### 延迟队列优化
+
+> 
+
+
+
+### RabbitMQ插件实现延迟队列
+
+> 
+
+
+
+### 总结
+
+> 
+
+
 
 
 
