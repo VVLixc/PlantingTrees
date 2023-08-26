@@ -883,21 +883,65 @@ RabbitMQ 3.8.8
 
 ### 延迟队列优化
 
-> 
+> 考虑上面的SpringBoot整合RabbitMQ的延时队列Demo：
+>
+> * 每增加一个新的时间需求，就需要新增一个队列，这里只有10s和40s两个选项，如果需要一小时后处理，就有需要新增一个TTL为一小时的队列，若是预定会议室然后提前通知此类场景，岂不是要新增无数个延时队列才能满足需求？
+>
+> 配置类：
+>
+> * 新增普通队列，并且声明该队列绑定的死信信息（交换机、RoutingKey）
+> * 将新增队列进行交换机之间的绑定
+>
+> 生产者-Controller层：
+>
+> * rabbitTemplate.convertAndSend(交换机名，队列名，消息，MessageProcessor);
+>
+> 问题：
+>
+> * 发送两条消息，若第一条消息的延时时间（TTL）很久，而第二个及之后的消息时长即便很短的情况下，也不会优先得到执行。
+> * 如果使用在消息属性上设置TTL方式，消息可能并不会按时死亡。
 
 
 
 ### RabbitMQ插件实现延迟队列
 
-> 
+> 插件下载：
+>
+> 1. https://www.rabbitmq.com/community-plugins.html
+> 2. GitHub: [rabbitmq/rabbitmq-delayed-message-exchange](https://github.com/rabbitmq/rabbitmq-delayed-message-exchange)
+> 3. https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases
+> 4. 下载对应的插件即可：这里我选用的rabbitmq_delayed_message_exchange-3.9.0.ez
+>
+> 插件安装：
+>
+> * 首先将下载的插件放置在：/usr/lib/rabbitmq/lib/rabbitmq_server-3.9.16/plugins 目录下
+> * 执行：rabbitmq-plugins enable rabbitmq_delayed_message_exchange
+> * 重启RabbitMQ
+>
+> 通过查看15672端口的UI界面判断是否安装完成：
+>
+> * Exchanges >>> Add a new exchange >>> Type中就会多出一个 x-delayed-message 类型的交换机。
+> * 这也就意味着该插件实现延迟消息的位置不再是队列了，而是通过交换机完成。
+>   * 延迟队列：基于死信完成的
+>   * 交换机：基于RabbitMQ的延迟插件完成的
 
 
 
 ### 总结
 
-> 
-
-
+> 本次了解了两种延迟队列的实现方式：
+>
+> * 基于死信队列的延迟
+>   * 不够理想，多条延迟消息依次发起请求，若访问靠前的消息过期时长较久，而靠后的过期时长较短，理想情况应该是互不干扰，但实际会等待访问靠前的先处理完成才会对之后的访问进行处理。
+> * 基于RabbitMQ插件的延迟队列
+>
+> 延时队列在需要延时处理的场景下非常有用，使用 RabbitMQ 来实现延时队列可以很好的利用RabbitMQ 的特性，如：消息可靠发送、消息可靠投递、死信队列来保障消息至少被消费一次以及未被正确处理的消息不会被丢弃。另外，通过 RabbitMQ 集群的特性，可以很好的解决单点故障问题，不会因为单个节点挂掉导致延时队列不可用或者消息丢失。
+>
+> * 死信队列虽然在处理延迟消息这一功能不够好，但是在消息TTL过期、队列超长、消息被拒绝这几方面都是很好的处理方案。
+>
+> 当然，延时队列还有很多其它选择，比如利用 Java 的 DelayQueue，利用 Redis 的 zset，利用 Quartz
+>
+> 或者利用 kafka 的时间轮，这些方式各有特点,看需要适用的场景
 
 
 
@@ -907,7 +951,19 @@ RabbitMQ 3.8.8
 
 ## 发布确认高级
 
+### 发布确认SpringBoot版本
 
+
+
+
+
+### 回退消息
+
+
+
+
+
+### 备份交换机
 
 
 
