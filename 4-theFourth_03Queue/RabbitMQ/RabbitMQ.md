@@ -1166,31 +1166,69 @@ RabbitMQ 3.8.8
 
 ### 镜像队列
 
+> MQ集群不可复用：在某节点创建的队列，其他节点并没有；那么假如该节点宕机，该队列就消失了。
+>
+> 引入镜像队列(Mirror Queue)的机制，可以将队列镜像到集群中的其他 Broker 节点之上，如果集群中的一个节点失效了，队列能自动地切换到镜像中的另一个节点上以保证服务的可用性。
+>
+> 搭建步骤：
+>
+> 1. 三台RabbitMQ集群节点运行中
+> 2. 在任一节点上添加一个policy策略
+>    * Admin >>> Policies >>> Add / update a policy：
+>      * Pattern：^mirror
+>        * 正则表达式，表示队列必须以mirror作为前缀才会进行备份（进行镜像处理）
+>      * Definition：
+>        * ha-mode：exactly（表示备机模式为指定模式）
+>        * ha-params：2（指定备机两份，包括主机在内）
+>        * ha-sync-mode：automatic（同步模式---自动）
+> 3. 在节点1上创建一个队列发送一条消息，队列存在镜像队列
+> 4. 停掉node1之后，可以看到node2成为镜像队列（当然此时若node2也宕机，会自动在node3进行备份）
+> 5. 就算整个集群只剩一台机器，也能够保证可以消费队列中的消息
+>    1. 说明队列中的消息被镜像队列传递到相应机器中。
 
 
 
+### HAProxy + Keepalive 实现高可用负载
 
-### Haproxy + Keepalive 实现高可用负载
-
-
+> 代码写死了连接RabbitMQ的IP，当该节点MQ宕机，无法自动变更到正常运行中的MQ节点：
+>
+> * Haproxy实现负载均衡：
+>   * 负载均衡的应用：Nginx、LVS、Haproxy
+>
+> 只要是生产者方无法连接多台机器，就可使用负载均衡相关应用解决：
+>
+> * Haproxy + Keepalive 就可以实现生产者消息的负载均衡转发，高可用就是负载均衡的主机宕机了，可以使用备机
 
 
 
 ### Federation Exchange
 
+> 联邦交换机/联合交换机：
+>
+> * 生产者发送消息到MQ，可能和Broker相距甚远，网络延迟就成为了必须面对的问题
+>
+> (broker 北京)，(broker 深圳)彼此之间相距甚远，网络延迟是一个不得不面对的问题。有一个在北京的业务(Client 北京) 需要连接(broker 北京)，向其中的交换器 exchangeA 发送消息，此时的网络延迟很小，(Client 北京)可以迅速将消息发送至 exchangeA 中，就算在开启了 publisherconfirm 机制或者事务机制的情况下，也可以迅速收到确认信息。此时又有个在深圳的业务(Client 深圳)需要向 exchangeA 发送消息，那么(Client 深圳) (broker 北京)之间有很大的网络延迟，(Client 深圳) 将发送消息至 exchangeA 会经历一
+> 定的延迟，尤其是在开启了 publisherconfirm 机制或者事务机制的情况下，(Client 深圳) 会等待很长的延迟时间来接收(broker 北京)的确认信息，进而必然造成这条发送线程的性能降低，甚至造成一定程度上的阻塞。
+> 将业务(Client 深圳)部署到北京的机房可以解决这个问题，但是如果(Client 深圳)调用的另些服务都部署在深圳，那么又会引发新的时延问题，总不见得将所有业务全部部署在一个机房，那么容灾又何以实现？这里使用 Federation 插件就可以很好地解决这个问题.
+>
+> 联邦交换机搭建步骤：
+>
+> 1. 需要保证在每台节点都要单独运行，也就是每台MQ都要搭建
+> 2. 开启Federation相关插件：
+>    * rabbitmq-plugins enable rabbitmq_federation
+>    * rabbitmq-plugins enable rabbitmq_federation_management
 
 
 
 
 ### Federation Queue
 
-
-
+> 
 
 
 ### Shovel
 
-
+> 
 
 
 
