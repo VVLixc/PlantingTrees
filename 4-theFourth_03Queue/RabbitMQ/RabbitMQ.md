@@ -43,18 +43,17 @@ RabbitMQ 3.8.8
 >      * ![image-20230819175256756](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20230819175256756.png)
 >
 > 3. ==异步处理：==
->
->    * 某些服务间调用是异步的，例如A调用B，B需花费很长时间执行，但A需要知道B何时执行完成；
+>* 某些服务间调用是异步的，例如A调用B，B需花费很长时间执行，但A需要知道B何时执行完成；
 >      * ==之前有两种方式解决---不够优雅：==
 >        * A过些时间调用B的查询API进行查询
 >        * A提供一个CallBack回调API，B执行完成之后调用API通知A服务
 >      * ==使用MQ：==
 >        * ==A调用B后，只需监听B处理完成的消息，B处理完成会将消息给MQ，MQ再将此消息转发给A。==
 >          * 这样A既不用循环调用B的查询API，也无需提供回调API；B同样也无需做这些操作；A服务还能及时得到异步处理成功的消息。
->
-> **MQ的分类：**
->
-> * ActiveMQ：
+> 
+>**MQ的分类：**
+> 
+>* ActiveMQ：
 >   * 吞吐量万级，时效性ms，可用性高，很低概率丢失数据
 >   * 社区维护很少，高吞吐量场景较少使用
 > * Kafka：
@@ -66,10 +65,10 @@ RabbitMQ 3.8.8
 > * RabbitMQ：
 >   * 当前最主流的消息中间件之一，高并发性能好，吞吐量万级，支持多种语言，社区活跃度高
 >   * 商业版需收费，学习成本较高
->
-> **MQ的选择：**
->
-> * Kafka：
+> 
+>**MQ的选择：**
+> 
+>* Kafka：
 >   * 适用于大型公司收集大量数据，如日志采集功能
 > * RocketMQ：
 >   * 天生为金融互联网领域而生，具有更好的可靠性、稳定性
@@ -1092,7 +1091,104 @@ RabbitMQ 3.8.8
 
 ## RabbitMQ集群
 
+### Clustering
 
+> 这里搭建三台Linux虚拟机，每台虚拟机安装有RabbitMQ消息中间件。
+>
+> 修改主机名称：
+>
+> * vim /etc/hostname   
+> * 并重启 reboot
+>
+> 配置各个节点hosts文件，让各个节点可以通过主机名互相识别：
+>
+> * vim /etc/hosts
+>
+> 确保各个节点的 cookie 文件使用的是同一个值：
+>
+> * 在 node1 上执行远程操作命令
+>   * scp /var/lib/rabbitmq/.erlang.cookie root@node2:/var/lib/rabbitmq/.erlang.cookie
+>   * scp /var/lib/rabbitmq/.erlang.cookie root@node3:/var/lib/rabbitmq/.erlang.cookie
+>
+> 启动 RabbitMQ 服务,顺带启动 Erlang 虚拟机和 RbbitMQ 应用服务(在三台节点上分别执行以下命令)
+>
+> * rabbitmq-server -detached
+>
+> 在节点 2 执行（相当于将1节点作为RabbitMQ集群主节点，2节点加到1节点）：
+>
+> * rabbitmqctl stop_app
+>   * (rabbitmqctl stop 会将 Erlang 虚拟机关闭，rabbitmqctl stop_app 只关闭 RabbitMQ 服务)
+>
+> * rabbitmqctl reset
+>
+> * rabbitmqctl join_cluster rabbit@node1
+>
+> * rabbitmqctl start_app(只启动应用服务)
+>
+> 在节点 3 执行：
+>
+> * rabbitmqctl stop_app
+>
+> * rabbitmqctl reset
+>
+> * rabbitmqctl join_cluster rabbit@node2
+>
+> * rabbitmqctl start_app
+>
+> 查看集群状态：
+>
+> * rabbitmqctl cluster_status
+>
+> 需要重新设置用户
+>
+> * 创建账号
+>   * rabbitmqctl add_user lixc 001214
+>
+> * 设置用户角色
+>   * rabbitmqctl set_user_tags lixc administrator
+>
+> * 设置用户权限
+>   * rabbitmqctl set_permissions -p "/" lixc ".*" ".*" ".*"
+>
+> 解除集群节点(node2 和 node3 机器分别执行)
+>
+> * rabbitmqctl stop_app
+>
+> * rabbitmqctl reset
+>
+> * rabbitmqctl start_app
+>
+> * rabbitmqctl cluster_status
+>
+> * rabbitmqctl forget_cluster_node rabbit@node2(node1 机器上执行)
+
+
+
+### 镜像队列
+
+
+
+
+
+### Haproxy + Keepalive 实现高可用负载
+
+
+
+
+
+### Federation Exchange
+
+
+
+
+
+### Federation Queue
+
+
+
+
+
+### Shovel
 
 
 
