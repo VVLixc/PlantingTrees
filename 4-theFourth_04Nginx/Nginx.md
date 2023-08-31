@@ -17,7 +17,7 @@
 
 ## Mini版CentOS7.9安装
 
-> 配置文成后修改文件开启网关：
+> 配置完成后修改文件开启网关：
 >
 > * vim /etc/sysconfig/network-scripts/ifcfg-ens33
 >
