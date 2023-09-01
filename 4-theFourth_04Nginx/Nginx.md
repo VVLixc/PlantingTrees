@@ -194,10 +194,83 @@
 > * location：
 >   * URL指的就是完整的访问网址
 >   * URI指的就是域名之后的地址，就是资源
+>
+> 虚拟主机：
+>
+> * 原本一台服务器只能对应一个站点，通过虚拟主机技术可以虚拟化多个站点同时对外提供服务。
+>
+> * 域名解析：
+>
+>   * 可以在本机hosts文件配置Linux虚拟机IP的域名解析，由于Linux开机自启动Nginx服务，访问该域名会自动跳转到Nginx默认网页。
+>
+> * 虚拟主机的配置在nginx.conf配置文件中进行（/usr/local/nginx/conf/nginx.conf）
+>
+>   * http模块下 >>> server模块（就是虚拟主机 vhost---Virtual Host）
+>     * listen监听的端口
+>     * server_name：域名、主机名
+>     * location /模块下的root表示访问location后面 / 这个站点时 会进入到root指定目录下 获取资源
+>   * 根据访问IP不同端口返回不同页面
+>     * 不需要配置多个域名，只需要区分不同端口就行
+>       * 192.168.222.135:80 当然也可以通过域名访问 nginx.com:80 也可以通过配置的外网域名进行访问---要购买
+>       * 192.168.222.135:88 当然也可以通过域名访问 nginx.com:88
+>   * 配置虚拟主机的两种方式
+>     * 方式一：区分端口号
+>     * 方式二：区分主机名/域名
+>     * 端口号 + 主机名 必须保持唯一性，否则修改完Nginx核心配置文件后，重载Nginx后查看状态是错误的
+>
+> * server_name匹配规则（必须确保设置的域名已经解析到服务器的IP地址）：
+>
+>   * 需要注意的是server_name匹配分先后顺序，写在前面的匹配上就不会继续向下进行匹配（都未匹配上就匹配第一个）。
+>
+>   * 完整匹配：
+>
+>     * 一个server（虚拟主机）模块下可以配置多个server_name，使用空格分隔即可
+>       * server_name localhost nginx1.com
+>
+>   * 通配符匹配：
+>
+>     * server_name *.mmban.com . *
+>     * *星号表示任意字符
+>
+>   * 正则匹配：
+>
+>     * ```sh
+>       server_name ~^[0-9]+\.mmban\.com$;
+>       ```
+>
+>   * 总结：
+>
+>     * server_name是一个非常重要的配置，尤其是在配置虚拟主机时。
+>
+> * 域名解析相关企业项目实战技术架构：
+>   * 多用户二级域名
+>     * ![image-20230831232451053](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20230831232451053.png)
+>   * 短网址
+>     * ![image-20230831233111992](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20230831233111992.png)
+>   * httpdns
+>     * 适用于C/S架构或APP
 
 
 
+### 反向代理
 
+> 正向代理和反向代理如何区分：
+>
+> * 看代理服务器是谁提供的，用户主动搭建代理服务器来访问外网就是正向代理；而服务器搭建Nginx反向代理服务器供用户访问就是反向代理
+> * ![image-20230831234035841](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20230831234035841.png)
+>
+> 网关：
+>
+> * 网关就是访问网络的入口
+> * 特点就是作为中间层进行数据的中转；
+>   * 该特点就造成了先天的瓶颈：
+>     * 流量大，网关服务的带宽不够足时，就有可能产生阻塞
+> * Nginx---隧道式代理
+> * Lvs---DR模式
+>
+> 负载均衡：
+>
+> * 算法---轮询
 
 
 
