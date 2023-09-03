@@ -1,4 +1,4 @@
-# Nginx
+# Nginx/1.24.0   2022
 
 > Nginx在互联网项目中担当者高性能的Web服务器、负载均衡器；
 >
@@ -271,8 +271,29 @@
 > 负载均衡：
 >
 > * 算法---轮询
+>
+> 配置Nginx反向代理服务器：
+>
+> * 关键字：proxy_pass
+>   * 使用位置nginx.conf核心配置文件下的server模块下的location模块内使用该关键字：
+>     * location下proxy_pass和root（指定目录）配置项二选一
+>       * 所以使用proxy_pass就可以将root和index配置项都注释掉。
+>   * 后面参数形式两种：
+>     * 代理的地址：主机/网址
+>       * proxy_pass http://www.atguigu.com;
+>         * 注意若是https 不支持https的 需要证书；需要在编译追加SSL模块
+>         * 若地址http://atguigu.com，也可以正常反向代理，但访问Nginx进行反向代理时会接收到302重定向的响应，浏览器地址就会发生变化（正常情况是访问Nginx，代理成功也是Nginx的请求地址）
+>     * 一组服务器
+>   * html文件要显示中文：
+>     * 要在head meta 中定义charset = utf-8
 
 
+
+
+
+
+
+# Nginx/1.24.0 2019
 
 
 
