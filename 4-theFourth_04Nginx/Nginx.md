@@ -272,7 +272,7 @@
 >
 > * 算法---轮询
 >
-> 配置Nginx反向代理服务器：
+> ==配置Nginx反向代理服务器：==
 >
 > * 关键字：proxy_pass
 >   * 使用位置nginx.conf核心配置文件下的server模块下的location模块内使用该关键字：
@@ -286,6 +286,275 @@
 >     * 一组服务器
 >   * html文件要显示中文：
 >     * 要在head meta 中定义charset = utf-8
+>
+
+
+
+### 基于反向代理的负载均衡
+
+> ==配置负载均衡：==
+>
+> * server模块下location模块下的proxy_pass配置项对应的参数可以定义一个想要在多台服务器负载均衡
+>
+>   * proxy_pass http://httplixc
+>
+> * upstream配置项（和server同一级别）
+>
+>   * ```sh
+>     upstream httplixc{
+>     	server 192.168.222.136:80;
+>     	server 192.168.222.137:80;
+>     }
+>     ```
+>
+> * 整体：
+>
+>   * ```sh
+>         upstream httplixc {
+>             server 192.168.222.136:80;
+>             server 192.168.222.137:80;
+>         }
+>
+>         server {
+>             listen       80;
+>             server_name  localhost;
+>
+>             location / {
+>                 proxy_pass http://httplixc;
+>                 # root   html;
+>                 # index  index.html index.htm;
+>             }
+>
+>             error_page   500 502 503 504  /50x.html;
+>             location = /50x.html {
+>                 root   html;
+>             }
+>         }
+>     ```
+>
+> * 这样在访问虚拟主机的server_name时，就会根据proxy_pass和upstream配置项进行访问的负载均衡（upstream两个服务器就会你一次我一次的被访问到）
+>
+> ==负载均衡策略：==
+>
+> * 轮询（RoundRobin---RR）：
+>   * 默认情况下负载均衡的使用的策略就是轮询方式，逐一转发，这种方式适用于无状态请求。
+>     * 无法保持回话（用户访问到一台服务器，登录；再次访问，被负载均衡轮询策略分配到了另一台服务器，登录信息cookie没有，就是无法保持会话）
+>
+> * weight权重：
+>
+>   * 指定轮询几率，weight和访问比率成正比，用于后端服务器性能不均的情况。
+>
+>   * 可以根据每台服务器的配置/网络出口高低来分配不同大小的权重（千兆带宽和十兆带宽分配的权重肯定会有区别）
+>
+>   * ```sh
+>     # 配置在upstream负载均衡模块的的server配置项中
+>         upstream httplixc {
+>            server 192.168.222.136:80 weight=7;
+>            server 192.168.222.137:80 weight=2;
+>            server 192.168.222.138:80 weight=1;
+>         }
+>         #上面的权重配置就是当浏览器访问server_name和listen组合的网址10次，访问7次是136、2次137、1次138。
+>
+>         upstream httplixc {
+>            server 192.168.222.136:80 weight=7 down;
+>            server 192.168.222.137:80 weight=2 backup;
+>            server 192.168.222.138:80 weight=1;
+>         }
+>         #weight：默认为1。weight越大，负载的权重就越大
+>         #down：表示当前的server主机暂时不参与负载
+>         #backup：其他所有的非backup机器down或者忙时，请求backup机器。（备用服务器，正常情况不会使用，只有当其他机器都没得用 才会使用到该机器）
+>
+>     #weight还是有用的，down和backup不常用。
+>     ```
+>
+> * 不太常用的策略：
+>
+>   * 以下的负载均衡策略都无法做到：
+>   * 服务器的动态上下线
+>   * ip_hash
+>   
+>   * 保持会话：判断来源的客户端IP地址，相同的IP访问到相同的服务器
+>     * 在当前互联网环境下已经无法适应，手机的移动端，移动过程中切换了移动的基站，IP地址就发生了变化。无法保证会话
+>   * least_conn：
+>     * 最少连接数访问
+>     * 分配了weight肯定就会出现负载分配不一致，所以least_conn不合理
+>   * url_hash：
+>     * 根据用户访问的url定向转发请求（还需要下载第三方插件）定向流量转发（ip_hash是定向ip转发）
+>       * 适用于访问固定资源，而不是维持会话
+>     * 用户访问注册，会将网址解析为哈希值，分配到特定服务器；而用户在注册完成登录时，解析的哈希值有可能就会分配到另一台服务器，无法保持会话。
+>     * fair：
+>         * 根据后端服务器响应时间转发请求（还需要下载第三方插件）
+>         * 会有流量倾斜的风险（一台服务器处理时长100ms，一台处理时长5ms，全给5ms的势必会造成流量倾斜）
+>   
+> * 真正生产环境下：
+>
+>   * 要么使用RR轮询策略（唯一的缺点就是无法保持会话）
+>     * 保持会话的策略：
+>       * 一个session对应一个cookie，cookie由用户端存储，每次用户携带cookie访问，会找session，这里将所有的session都存储到Redis服务器中，每次轮询分配到不同服务器时需要session时都会去Redis服务器中寻找。
+>         * 不适用于大规模的高并发场景。
+>         * 高并发场景会用到真正的无状态会话--->下发token
+>   * 要么使用LUA脚本自定义转发规则
+
+
+
+### 动静分离
+
+> Nginx的动静分离一般适用于中小型的网站（并发量不会特别高，且需要分离出来的静态资源不会特别多）
+>
+> * 可以起到系统加速的作用。
+>
+> 原理：
+>
+> * 将处理静态资源和处理动态请求的功能分别交给不同的服务器或服务进行处理，以提高系统的性能和并发能力。
+> * 通过Nginx的动静分离，可有效减轻动态应用服务器的负载，提高系统的性能和并发能力。同时还通过负载均衡实现高可用性，某个服务器出现故障Nginx会自动将请求转发给其他正常服务器，保证系统的可用性。
+>
+> Nginx动静分离的配置：
+>
+> * 被反向代理的机器页面：
+>
+>   * ```html
+>     <!DOCTYPE html>   		<!--表示文件为HTML-->
+>     <html lang="zh_CN">   		<!--html页面开始-->
+>     <head>    			<!--页面头开始-->
+>       <meta charset="UTF-8">  		<!--字符集设置-->
+>       <title>HTML页面书写规范</title>  	<!--页面标题-->
+>     </head>    			<!--页面头结束-->
+>     <body>    			<!--页面body体开始-->
+>     <h1 align="center">Hello Nginx. This is 138.</h1>
+>     <br/>
+>     <div style="text-align:center">
+>     <img src="/img/heart.jpg" width="500" height="500"/>
+>     </div>
+>     </body>     			<!--页面body体结束-->
+>     </html>     			<!--html页面结束-->
+>     ```
+>
+>   * 这里引用的是在html目录下img目录下的heart.jpg图片；此时将该img目录删除（静态资源）
+>
+> * 通过访问服务器来反向代理出上面的页面信息：
+>
+>   * ```sh
+>         upstream httplixc {
+>            server 192.168.222.136:80 weight=7 down;
+>            server 192.168.222.137:80 weight=2 backup;
+>            server 192.168.222.138:80 weight=1;
+>         }
+>     
+>         server {
+>             listen       80;
+>             server_name  localhost;
+>     
+>             location / {
+>                 proxy_pass http://httplixc;
+>             }
+>             
+>             error_page   500 502 503 504  /50x.html;
+>             location = /50x.html {
+>                 root   html;
+>             }
+>         }
+>     ```
+>
+>   * 此刻访问135（反向代理了138机器）弹出的界面没有图片---因为在138已经删除掉了静态资源
+>
+>   * 此时可以在135机器下新建静态资源目录
+>
+>     * html目录下新加img目录
+>
+>   * nginx.conf配置文件中新增location模块（和反向代理的location平级）用来指向img目录
+>
+>     * ```sh
+>               location /img {
+>                   root   html;
+>                   index  index.html index.htm;
+>               }
+>               #这里的/img经过root的组合自动解析：/html/img
+>       ```
+>
+>   * 此时再访问135就会反向代理138，然后获取图片静态资源就会在135下寻找index.html页面平级的img目录下的图片，正常显示。
+>
+> * Nginx动静分离配置解析：
+>
+>   * location木块的/和/img等等，都要比/优先级高
+>
+>   * 正则方式匹配静态资源----省去定义每一个location模块
+>
+>     * ```sh
+>               location /img1 {
+>                   root   html;
+>                   index  index.html index.htm;
+>               }
+>       
+>               location /img2 {
+>                   root   html;
+>                   index  index.html index.htm;
+>               }
+>               #使用正则方式匹配静态资源：
+>               #~使用正则方式；*不区分大小写
+>               location ~*/(img1|img2) {
+>                   root   html;
+>                   index  index.html index.htm;
+>               }
+>       ```
+>
+>   * Nginx动静分离的配置比较简单，但是需要将静态资源传递到前置服务器上
+>
+>     * 静态、缓存这一类的资源，越往前放越好，减少网络开销
+
+
+
+### URLRewrite
+
+> 可以隐藏后端服务器真实的地址。（这里实在不想整理Tomcat，直接使用的html页面代替测试）
+>
+> 关键字rewrite（和proxy_pass同级）：
+>
+> * 被代理的服务器
+>
+>   * html目录下新增dogcome目录，里面有具体的页面
+>
+>   * conf目录下核心配置文件：
+>
+>     * ```sh
+>       #新增location用来处理访问该资源
+>       location /dogcome {
+>                   root   html;
+>                   index  dog.html index.htm;
+>       }
+>       
+>       ```
+>
+> * 前置服务器：
+>
+>   * ```sh
+>     # rewrite关键字用来隐藏访问的真实地址：
+>     #        rewrite ^将要访问的地址$   隐藏的真实地址  break/redirect
+>     location / {
+>                 rewrite ^/dog$ /dogcome break;
+>                 proxy_pass http://192.168.222.138;
+>                 #proxy_pass http://httplixc;
+>                 #root   html;
+>                 #index  index.html index.htm;
+>     }
+>     ```
+>
+>   * 此时访问http://192.168.222.135/dog就可以反向代理到138服务器，并且访问http://192.168.222.138/dogcome目录。
+>
+> 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
