@@ -540,7 +540,167 @@
 >
 >   * 此时访问http://192.168.222.135/dog就可以反向代理到138服务器，并且访问http://192.168.222.138/dogcome目录。
 >
-> 
+> ==负载均衡+URLRewrite：==
+>
+> * 135服务器反向代理了138服务器（Tomcat），且进行了Nginx的动静分离的配置：
+>
+>   * 此时直接访问138服务器的服务是无法加载图片等静态资源的；
+>   * 就可称之为135服务器是138服务器的网关。
+>   * 且真正生产环境下138对应的8080端口肯定不能直接被外网访问到的，想要访问就必须通过135。
+>
+> * 应用服务器开启防火墙：
+>
+>   * 开启防火墙：systemctl start firewalld
+>
+>   * 指定端口和IP访问：
+>
+>     * ```sh
+>       firewall-cmd --permanent --add-rich-rule="rule family="ipv4" source address="192.168.222.135" port protocol="tcp" port="8080" accept"
+>       ```
+>
+>     * 该指定就可指定address的主机IP可以访问该主机下的8080端口（即使该端口并未放开）。
+>
+>   * 重载防火墙：firewall-cmd --reload
+>
+>   * 查看已配置规则：firewall-cmd --list-all
+>
+>   * 此时这个应用服务器（例如Tomcat）就只能够内网的指定的主机访问；用户通过指定的主机访问到应用服务器，这台主机可称之为网关服务器。（反向代理服务器、负载均衡器都太片面了）
+>
+>     * 集成了反向代理、负载均衡、动静分离、URLRewrite功能与一身的服务器，网关服务器。
+
+
+
+### 防盗链配置
+
+> 某台主机内部的资源，若不想让其他主机通过访问该站点（例如反向代理）获取到这些资源，可进行防盗链配置。
+>
+> * 可配置到任意的location下
+>
+>   * if和（之间必须有空格
+>
+>   * ```sh
+>     #valid_referers后面指定有效的引用访问域名，注意不一定是IP（可以观察f12中network后第二次的请求头访问refer信息）
+>     #动静分离---正则方式匹配静态资源，避免定义多个目录对应的多个location模块
+>     location ~*/(img1|img2|img3|img4) {
+>     	valid_referers none 192.168.222.135;
+>     	if ($invalid_referer) {
+>     		return 403;
+>     	}
+>     }
+>     
+>     #none， 检测 Referer 头域不存在的情况。
+>     #blocked，检测 Referer 头域的值被防火墙或者代理服务器删除或伪装的情况。这种情况该头域的值不以“http://” 或 “https://” 开头。
+>     #server_names ，设置一个或多个 URL ，检测 Referer 头域的值是否是这些 URL 中的某一个。
+>     ```
+>
+> * 例如137服务器反向代理了135服务器：
+>
+>   * 访问137可直接代理到135的资源
+>   * 若不想让137访问到135的静态资源，即可在135的动静分离location模块下进行配置。
+>     * 在此基础上若想137在不代理135主机时，单独访问135的静态资源信息，可配置none参数。
+>
+> * 返回错误页面：
+>
+>   * 上面的配置就是返回错误码：return 403；
+>
+>   * ```sh
+>             #动静分离---正则方式匹配静态资源，避免定义多个目录对应的多个location模块
+>             location ~*/(img1|img2|img3|img4) {
+>     			valid_referers none 192.168.222.135;
+>     			if ($invalid_referer) {
+>     				return 403;
+>     			}
+>                 root html;
+>                 index index.html index.htm;
+>             }
+>     
+>     		#通过上面的return对应到这里（注意要在对应的位置定义错误页面，例如这里就需要在/html目录下定义403.html）
+>             error_page   403  /403.html;
+>             location = /403.html {
+>                 root   html;
+>             }
+>     ```
+>
+>   * 整合rewrite返回报错图片：
+>
+>     * ```sh
+>               #动静分离---正则方式匹配静态资源，避免定义多个目录对应的多个location模块
+>               location ~*/(img1|img2|img3|img4) {
+>       			valid_referers none 192.168.222.135;
+>       			if ($invalid_referer) {
+>       			    #通过rewrite返回报错图片：（不再return）
+>       				rewrite ^/ /img5/daolian.png break;
+>       				#return 403;
+>       			}
+>                   root html;
+>                   index index.html index.htm;
+>               }
+>       ```
+>
+> CURL：
+>
+> * 安装Linux中curl工具：
+>   * yum install -y curl
+> * 选项：
+>   * -I：携带该选项访问，不会将内容展示，只会返回响应的一些头信息
+>     * curl -I http://192.168.222.135
+>     * curl -I http://192.168.222.137/img3/dog.png
+>   * -e：
+>     * 测试带引用（refer）的请求，-e后面携带 需要引用的地址
+>     * curl -e "http://192.168.222.137" -I http://192.168.222.137/img3/dog.png
+
+
+
+
+
+## 高可用配置
+
+### 安装Keepalived
+
+> HA：High Availability高可用
+>
+> keepalived是主机级别的检测，进程级别的检测；不止能够运用到Nginx上，只是检测了机器上keepalived有没有存活，所以可以检测一切（例如两台MySQL、两台Redis、两台RabbitMQ等等；都可以通过脚本检测然后杀死keepalived然后进行ip漂移）
+>
+> 执行：yum install -y keepalived
+>
+> 安装完成后，配置文件在：/etc/keepalived/keepalived.conf
+>
+> 修改主机配置文件：
+>
+> * 从VI_1之后的模块即自virtual_server ip 443模块起及其后面全部删除掉
+> * global_defs模块只保留router_id，可以自定义名称
+> * state MASTER表示主机
+> * vrrp_instance是内网当中通讯的协议 后面参数名也可自定义
+>   * interface 对应网卡名字（一般是ens33）
+>   * priority优先级使用默认100
+>   * virtual_address表示虚拟IP地址；用来提供给用户访问的，不在访问机器真实IP
+> * 启动keepalived：systemctl。。。
+> * 之后ip addr查看IP地址：
+>   * 发现ens33网卡多了一个IP地址---对应keepalived虚拟出来的IP（vip）
+>
+> 修改备机配置文件：
+>
+> * 复制一份主机的配置文件
+> * global_defs模块的router_id，自定义名称。
+> * state BACKUP表示备机
+> * priority优先级设置比主机优先级低些（例如50）
+> * 启动
+> * 查看ip：
+>   * 备机上ens33网卡没有虚拟ip
+>
+> 本机：
+>
+> * ping 虚拟ip -t
+> * 此刻将主机停止，模仿Nginx宕机
+> * 稍等就会发现ping的虚拟ip还是通的
+> * 再次查看备机ip：
+>   * 备机ens33网卡上有了虚拟ip（通过keepalived：ip漂移）
+
+
+
+
+
+### 配置
 
 
 
