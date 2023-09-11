@@ -243,6 +243,7 @@
 >     * server_name是一个非常重要的配置，尤其是在配置虚拟主机时。
 >
 > * 域名解析相关企业项目实战技术架构：
+>
 >   * 多用户二级域名
 >     * ![image-20230831232451053](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20230831232451053.png)
 >   * 短网址
@@ -286,7 +287,6 @@
 >     * 一组服务器
 >   * html文件要显示中文：
 >     * 要在head meta 中定义charset = utf-8
->
 
 
 
@@ -314,17 +314,17 @@
 >             server 192.168.222.136:80;
 >             server 192.168.222.137:80;
 >         }
->
+>     
 >         server {
 >             listen       80;
 >             server_name  localhost;
->
+>     
 >             location / {
 >                 proxy_pass http://httplixc;
 >                 # root   html;
 >                 # index  index.html index.htm;
 >             }
->
+>     
 >             error_page   500 502 503 504  /50x.html;
 >             location = /50x.html {
 >                 root   html;
@@ -337,6 +337,7 @@
 > ==负载均衡策略：==
 >
 > * 轮询（RoundRobin---RR）：
+>
 >   * 默认情况下负载均衡的使用的策略就是轮询方式，逐一转发，这种方式适用于无状态请求。
 >     * 无法保持回话（用户访问到一台服务器，登录；再次访问，被负载均衡轮询策略分配到了另一台服务器，登录信息cookie没有，就是无法保持会话）
 >
@@ -354,7 +355,7 @@
 >            server 192.168.222.138:80 weight=1;
 >         }
 >         #上面的权重配置就是当浏览器访问server_name和listen组合的网址10次，访问7次是136、2次137、1次138。
->
+>     
 >         upstream httplixc {
 >            server 192.168.222.136:80 weight=7 down;
 >            server 192.168.222.137:80 weight=2 backup;
@@ -363,7 +364,7 @@
 >         #weight：默认为1。weight越大，负载的权重就越大
 >         #down：表示当前的server主机暂时不参与负载
 >         #backup：其他所有的非backup机器down或者忙时，请求backup机器。（备用服务器，正常情况不会使用，只有当其他机器都没得用 才会使用到该机器）
->
+>     
 >     #weight还是有用的，down和backup不常用。
 >     ```
 >
@@ -372,7 +373,7 @@
 >   * 以下的负载均衡策略都无法做到：
 >   * 服务器的动态上下线
 >   * ip_hash
->   
+>
 >   * 保持会话：判断来源的客户端IP地址，相同的IP访问到相同的服务器
 >     * 在当前互联网环境下已经无法适应，手机的移动端，移动过程中切换了移动的基站，IP地址就发生了变化。无法保证会话
 >   * least_conn：
@@ -383,9 +384,9 @@
 >       * 适用于访问固定资源，而不是维持会话
 >     * 用户访问注册，会将网址解析为哈希值，分配到特定服务器；而用户在注册完成登录时，解析的哈希值有可能就会分配到另一台服务器，无法保持会话。
 >     * fair：
->         * 根据后端服务器响应时间转发请求（还需要下载第三方插件）
->         * 会有流量倾斜的风险（一台服务器处理时长100ms，一台处理时长5ms，全给5ms的势必会造成流量倾斜）
->   
+>       * 根据后端服务器响应时间转发请求（还需要下载第三方插件）
+>       * 会有流量倾斜的风险（一台服务器处理时长100ms，一台处理时长5ms，全给5ms的势必会造成流量倾斜）
+>
 > * 真正生产环境下：
 >
 >   * 要么使用RR轮询策略（唯一的缺点就是无法保持会话）
@@ -447,7 +448,7 @@
 >             location / {
 >                 proxy_pass http://httplixc;
 >             }
->             
+>     
 >             error_page   500 502 503 504  /50x.html;
 >             location = /50x.html {
 >                 root   html;
@@ -464,11 +465,11 @@
 >   * nginx.conf配置文件中新增location模块（和反向代理的location平级）用来指向img目录
 >
 >     * ```sh
->               location /img {
->                   root   html;
->                   index  index.html index.htm;
->               }
->               #这里的/img经过root的组合自动解析：/html/img
+>           location /img {
+>               root   html;
+>               index  index.html index.htm;
+>           }
+>           #这里的/img经过root的组合自动解析：/html/img
 >       ```
 >
 >   * 此时再访问135就会反向代理138，然后获取图片静态资源就会在135下寻找index.html页面平级的img目录下的图片，正常显示。
@@ -480,21 +481,21 @@
 >   * 正则方式匹配静态资源----省去定义每一个location模块
 >
 >     * ```sh
->               location /img1 {
->                   root   html;
->                   index  index.html index.htm;
->               }
+>           location /img1 {
+>               root   html;
+>               index  index.html index.htm;
+>           }
 >       
->               location /img2 {
->                   root   html;
->                   index  index.html index.htm;
->               }
->               #使用正则方式匹配静态资源：
->               #~使用正则方式；*不区分大小写
->               location ~*/(img1|img2) {
->                   root   html;
->                   index  index.html index.htm;
->               }
+>           location /img2 {
+>               root   html;
+>               index  index.html index.htm;
+>           }
+>           #使用正则方式匹配静态资源：
+>           #~使用正则方式；*不区分大小写
+>           location ~*/(img1|img2) {
+>               root   html;
+>               index  index.html index.htm;
+>           }
 >       ```
 >
 >   * Nginx动静分离的配置比较简单，但是需要将静态资源传递到前置服务器上
@@ -604,37 +605,37 @@
 >   * 上面的配置就是返回错误码：return 403；
 >
 >   * ```sh
->             #动静分离---正则方式匹配静态资源，避免定义多个目录对应的多个location模块
->             location ~*/(img1|img2|img3|img4) {
->     			valid_referers none 192.168.222.135;
->     			if ($invalid_referer) {
->     				return 403;
->     			}
->                 root html;
->                 index index.html index.htm;
->             }
+>         #动静分离---正则方式匹配静态资源，避免定义多个目录对应的多个location模块
+>         location ~*/(img1|img2|img3|img4) {
+>         			valid_referers none 192.168.222.135;
+>         			if ($invalid_referer) {
+>         				return 403;
+>         			}
+>            root html;
+>            index index.html index.htm;
+>        }
 >     
->     		#通过上面的return对应到这里（注意要在对应的位置定义错误页面，例如这里就需要在/html目录下定义403.html）
->             error_page   403  /403.html;
->             location = /403.html {
->                 root   html;
->             }
+>         		#通过上面的return对应到这里（注意要在对应的位置定义错误页面，例如这里就需要在/html目录下定义403.html）
+>         error_page   403  /403.html;
+>         location = /403.html {
+>             root   html;
+>         }
 >     ```
 >
 >   * 整合rewrite返回报错图片：
 >
 >     * ```sh
->               #动静分离---正则方式匹配静态资源，避免定义多个目录对应的多个location模块
->               location ~*/(img1|img2|img3|img4) {
->       			valid_referers none 192.168.222.135;
->       			if ($invalid_referer) {
->       			    #通过rewrite返回报错图片：（不再return）
->       				rewrite ^/ /img5/daolian.png break;
->       				#return 403;
->       			}
->                   root html;
->                   index index.html index.htm;
->               }
+>           #动静分离---正则方式匹配静态资源，避免定义多个目录对应的多个location模块
+>           location ~*/(img1|img2|img3|img4) {
+>           			valid_referers none 192.168.222.135;
+>           			if ($invalid_referer) {
+>           			    #通过rewrite返回报错图片：（不再return）
+>           				rewrite ^/ /img5/daolian.png break;
+>           				#return 403;
+>           			}
+>              root html;
+>              index index.html index.htm;
+>          }
 >       ```
 >
 > CURL：
@@ -793,21 +794,22 @@
 >
 >       * ```sh
 >         wget -c http://mirrors.oneinstack.com/oneinstack-full.tar.gz && tar xzf oneinstack-full.tar.gz && ./oneinstack/install.sh --nginx_option 1 --php_option 9 --phpcache_option 1 --db_option 2 --dbinstallmethod 1 --dbrootpwd lz001214. --reboot 
->         
->         
+>         ```
+>
+>
 >         ####################Congratulations########################
 >         Total OneinStack Install Time: 33 minutes
->         
+>             
 >         Nginx install dir:              /usr/local/nginx
->         
+>             
 >         Database install dir:           /usr/local/mysql
 >         Database data dir:              /data/mysql
 >         Database user:                  root
 >         Database password:              lz001214.
->         
+>             
 >         PHP install dir:                /usr/local/php
 >         Opcache Control Panel URL:      http://192.168.222.140/ocp.php
->         
+>             
 >         Index URL:                      http://192.168.222.140/
 >         ```
 >
@@ -864,14 +866,216 @@
 
 # Nginx/1.24.0 2019
 
+## Nginx基本概念
+
+### Nginx是什么，能做什么
+
+> Nginx作为当下最主流的高性能的HTTP和反向代理的Web服务器；网关服务器
+>
+> * 反向代理、负载均衡、动静分离、URL重写 功能集于一身的网关服务器。
+> * 占有内存少，并发能力强
+> * nginx专为性能优化而开发，有报告表明Nginx能支持高达50000个并发连接数
+
+
+
+### 反向代理 proxy_pass
+
+> 正向代理和反向代理：
+>
+> * 看代理服务器是谁提供的，用户主动搭建的代理服务器来访问外网就是正向代理（例如正向代理的路由器）
+> * 服务器搭建的反向代理服务器来供用户进行访问就是反向代理（客户端对代理是无感知的，因为客户端无需任何配置即可访问）。
+>   * 反向代理服务器和目标服务器对外就是一个服务器，暴露的是代理服务器地址，隐藏了真实的服务器IP地址。
+
+
+
+### 负载均衡 upstream
+
+> 并发请求相对较小情况下，客户端发送请求到服务器，服务器处理业务后完成响应。
+>
+> 但随着信息数量不断增长，访问量和数据量的增长；服务器肯定会有瓶颈，可以考虑增加服务器数量：
+>
+> * 使用Nginx反向代理服务器对多台服务器进行请求访问的负载均衡配置（请求分发到各个服务器）
+>   * 将负载分发到不同的服务器，也就是负载均衡。
+
+
+
+### 动静分离 location
+
+> 为了加快网站的解析速度（起到系统加速的作用），可以将处理静态资源和处理动态请求的功能分别交给不同的服务器进行处理。
+
+
+
+### URLRewrite rewrite
+
+>  
 
 
 
 
 
+## Nginx安装、常用命令、配置文件
+
+### Linux系统安装Nginx
+
+> Linux版本：CentOS7.9 Minimal
+>
+> Nginx版本：Nginx/1.24.0
+>
+> 一键安装gcc、zlib、perl、openssl：
+>
+> * yum -y install gcc zlib zlib-devel pcre pcre-devel openssl openssl-devel
+
+
+
+### Nginx常用命令
+
+> 查看Nginx版本号：
+>
+> * ./nginx -v
+>
+> 启动Nginx：
+>
+> * ./nginx
+>
+> 停止Nginx：
+>
+> * ./nginx -s stop
+>
+> 重载Nginx：
+>
+> * ./nginx -s reload
+
+
+
+### Nginx核心配置文件nginx.conf
+
+> Nginx核心配置文件：
+>
+> * /usr/local/nginx/conf/nginx.conf
+>
+> nginx.conf配置文件组成：
+>
+> 1. 全局块：
+>
+>    * 从配置文件开始到events块之间的内容，主要设置一些影响Nginx服务器整体运行的配置指令
+>    * 例如work_process 1：表示由master_process主进程开启的工作子进程，值越大，可支持的并发处理量越多
+>
+> 2. events块：
+>
+>    * 主要影响Nginx服务器与用户的网络连接
+>    * 例如work_connections 1024：支持最大连接数
+>
+> 3. http块：
+>
+>    * Nginx配置最频繁的部分
+>    * http全局块
+>
+>    * server块：
+>      * 与vhost虚拟主机有密切关系
+>      * server全局块
+>      * location块
 
 
 
 
 
-# 末尾
+## Nginx配置实例
+
+### Nginx反向代理
+
+### Nginx负载均衡
+
+### Nginx动静分离
+
+	# 负载均衡
+	upstream httplixc {
+		server 192.168.222.136:8080 weight=1;
+		server 192.168.222.138:8080 weight=2;
+	}
+	
+	# 虚拟主机
+	server {
+		listen 80;
+		server_name *.lixc.com;
+		location / {
+			# URLRewrite URL重写;
+			rewrite ^/([0-9]+).html$ /index.jsp?pageNum=$1 break;
+			# 反向代理
+			# proxy_pass http://192.168.222.138:8080;
+			proxy_pass http://httplixc;
+			root html;
+			index index.html index.htm;
+		}
+		# 动静分离
+		location ~*/(img1|img2|img3|img4) {
+			root html;
+			index index.html index.htm;
+		}
+	
+	    		error_page   500 502 503 504  /50x.html;
+	    		location = /50x.html {
+	        			root   html;
+	    		}
+	}
+
+
+​	
+
+	======
+	location块：
+	*：不含正则表达式的uri，要求请求字符串与uri严格匹配
+	~：用于表示uri包含正则表达式，且区分大小写
+	~*:表示uri包含正则表达式，不区分大小写
+
+
+​	
+
+	location模块中：
+	autoindex on; 表示列出当前文件夹下的内容（文件目录）；
+	expires设置缓存：会查看服务器这个文件是否被修改，没修改就使用缓存，返回302；修改了获取服务器数据，返回200
+
+
+### Nginx配置高可用集群 keepalived
+
+> yum -y install keepalived
+>
+> rpm -q -a keepalived：查看Keepalived工具安装是否成功
+>
+> 添加检测脚本：
+>
+> * vrrp_script
+
+
+
+
+
+## Nginx原理（执行原理）
+
+> master进程负责接收分发任务，worker进程负责处理任务，多个worker（默认一个）通过“争抢”的方式获取任务的处理权。
+>
+> 一个master多个worker好处：
+>
+> * 利于nginx热部署
+> * 每个worker都是独立的进程，不需要加锁；并且当一个worker进程异常，不会影响其他worker，保障了服务的高可用
+>
+> 设置多少worker：
+>
+> * Nginx和Redis类似都采用了IO多路复用机制；每个worker都是一个独立的进程
+> * 每个worker都可以将一个CPU 的性能发挥到极致，所以worker和服务器的CPU数量相等是最为适宜的。
+>
+> 连接数 worker_connection：
+>
+> * 发送一个请求，占用了worker的几个连接数：
+>   * 两个或者四个
+> * 支持的最大并发数：
+>   * 有几个worker_process进程，每个进程worker又支持的最大连接数worker_connection是多少：
+>     * 作为普通的静态访问：worker_process * worker_connection / 2
+>     * 作为反向代理服务器：worker_process * worker_connection / 4
+>       * 反向代理肯定会去再连接其他的服务器，连接数又会增加两个（来回）
+
+
+
+
+
+#末尾
+
