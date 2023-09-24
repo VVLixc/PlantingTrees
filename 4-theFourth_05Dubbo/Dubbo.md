@@ -90,11 +90,31 @@
 
 ### Dubbo---Hello World
 
-
+> * 将服务提供者注册到注册中心
+>   * 导入Dubbo依赖（3.2）、引入操作Zookeeper的客户端（curator）
+>   * 配置服务提供者
+> * 让服务消费者在注册中心订阅服务提供者的服务地址
 
 
 
 ### 监控中心
+
+> Dubbo Admin：
+>
+> * 更好的可视化Dubbo服务而设计的控制台（Dubbo Admin 管理控制台）
+>
+> Dubbo Monitor Simple：
+>
+> * 简单的监控中心
+>
+> * 用于监控服务调用的相关信息
+>
+> * ```xml
+>   <dubbo:monitor protocol="registry"/>
+>   ```
+>
+> * 
+>
 
 
 
@@ -102,7 +122,32 @@
 
 ### 整合SpringBoot
 
-
+> 配置服务提供者：
+>
+> * 导入依赖
+>   * 导入dubbo-starter
+>   * 导入dubbo其他依赖（操作Zookeeper的curator）
+> * application配置文件
+>   * 指定当前应用的名字
+>   * 指定注册中心的位置
+>   * 指定通信规则
+>   * 声明需要暴露的服务接口---不再配置
+>     * 在需要暴露的服务接口上方添加@Service注解
+>       * 该注解是dubbo的注解
+> * 主程序@EnableDubbo开启基于注解的Dubbo功能
+>   * 配置文件若配置了dubbo.scan.base-packages就不用该注解
+>
+> 配置服务消费者：
+>
+> * 导入依赖
+> * application配置文件
+>   * 指定当前应用名
+>   * 指定注册中心位置
+>   * 声明要引用的远程服务的接口---不再配置
+>     * @Autowired更换为Dubbo提供的@Reference注解
+>       * 远程引用被注解修饰的服务---从注册中心发现
+> * 主程序@EnableDubbo开启基于注解的Dubbo功能
+>   * 配置文件若配置了dubbo.scan.base-packages就不用该注解
 
 
 
